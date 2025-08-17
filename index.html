@@ -3,10 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dave Declaration Widget</title>
+    <title>Declaration of the Daves - Sign the Contract</title>
     
     <!-- Allow embedding in iframes -->
     <meta http-equiv="X-Frame-Options" content="ALLOWALL">
+    
+    <!-- Font -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     
     <style>
         * {
@@ -16,118 +19,297 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: transparent;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            background: #0d1117;
+            color: #c9d1d9;
+            font-family: 'JetBrains Mono', monospace;
             min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             padding: 20px;
         }
         
-        .container {
-            text-align: center;
+        .contract-container {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
             width: 100%;
-            max-width: 600px;
+            max-width: 800px;
+            overflow: hidden;
         }
         
-        .error-message {
-            color: #dc3545;
-            font-size: 14px;
-            margin-bottom: 20px;
-            min-height: 20px;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-        
-        .error-message.show {
-            opacity: 1;
-        }
-        
-        .input-wrapper {
+        .contract-header {
+            background: #0d1117;
+            border-bottom: 1px solid #30363d;
+            padding: 12px 20px;
             display: flex;
             align-items: center;
-            justify-content: center;
-            font-size: 28px;
-            margin-bottom: 30px;
-            flex-wrap: wrap;
-            gap: 5px;
+            gap: 8px;
         }
         
-        .prefix, .suffix {
-            color: #000;
-            font-weight: 400;
+        .file-icon {
+            color: #7ee787;
+        }
+        
+        .filename {
+            color: #f0f6fc;
+            font-size: 14px;
+        }
+        
+        .network-badge {
+            margin-left: auto;
+            background: #1f6feb;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+        
+        .code-editor {
+            padding: 20px 0;
+            min-height: 400px;
+            position: relative;
+        }
+        
+        .line-numbers {
+            position: absolute;
+            left: 0;
+            top: 20px;
+            width: 50px;
+            text-align: right;
+            color: #484f58;
+            font-size: 14px;
+            line-height: 22px;
+            user-select: none;
+        }
+        
+        .code-content {
+            margin-left: 70px;
+            margin-right: 20px;
+            font-size: 14px;
+            line-height: 22px;
+        }
+        
+        /* Syntax highlighting */
+        .comment {
+            color: #8b949e;
+            font-style: italic;
+        }
+        
+        .keyword {
+            color: #ff7b72;
+        }
+        
+        .function-name {
+            color: #d2a8ff;
+        }
+        
+        .type {
+            color: #79c0ff;
+        }
+        
+        .string {
+            color: #a5d6ff;
+        }
+        
+        .parameter {
+            color: #ffa657;
+        }
+        
+        .address {
+            color: #7ee787;
+            font-size: 12px;
+        }
+        
+        /* Input styling */
+        .input-line {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            transition: border-color 0.2s;
+        }
+        
+        .input-line:hover {
+            border-color: #58a6ff;
+        }
+        
+        .input-line.focused {
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+        }
+        
+        .input-prefix {
+            color: #a5d6ff;
         }
         
         .name-input {
-            border: 2px solid #000;
-            background: #fff;
-            padding: 6px 14px;
-            font-size: 28px;
-            text-align: center;
-            min-width: 180px;
-            outline: none;
-            font-family: inherit;
-            transition: all 0.2s ease;
-        }
-        
-        .name-input:focus {
-            border-color: #000;
-            box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
-        }
-        
-        .connect-button {
-            background: #000;
-            color: #fff;
+            background: none;
             border: none;
-            border-radius: 40px;
-            padding: 16px 48px;
-            font-size: 18px;
-            font-weight: 500;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            min-width: 200px;
+            color: #a5d6ff;
             font-family: inherit;
+            font-size: 14px;
+            outline: none;
+            width: 200px;
+            margin: 0 4px;
         }
         
-        .connect-button:hover:not(:disabled) {
-            background: #333;
+        .input-suffix {
+            color: #a5d6ff;
+        }
+        
+        .cursor {
+            display: inline-block;
+            width: 2px;
+            height: 16px;
+            background: #58a6ff;
+            animation: blink 1s infinite;
+            vertical-align: text-bottom;
+            display: none;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        
+        /* Preview section */
+        .preview-comment {
+            margin-top: 16px;
+            padding: 8px;
+            background: #0d1117;
+            border-radius: 4px;
+        }
+        
+        /* Action section */
+        .action-section {
+            background: #0d1117;
+            border-top: 1px solid #30363d;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .gas-estimate {
+            font-size: 12px;
+            color: #8b949e;
+        }
+        
+        .execute-button {
+            background: #f78166;
+            color: #0d1117;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .execute-button:hover:not(:disabled) {
+            background: #ff8c73;
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
         
-        .connect-button:active:not(:disabled) {
+        .execute-button:active:not(:disabled) {
             transform: translateY(0);
         }
         
-        .connect-button:disabled {
+        .execute-button:disabled {
             opacity: 0.6;
             cursor: not-allowed;
         }
         
-        .info-text {
-            color: #666;
-            font-size: 14px;
-            margin-top: 20px;
+        /* Connected status */
+        .wallet-status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 12px;
+            color: #7ee787;
+            display: none;
+            align-items: center;
+            gap: 6px;
         }
         
-        .success-message {
-            color: #28a745;
-            font-size: 16px;
-            margin-top: 20px;
-            padding: 16px 24px;
-            background: #d4edda;
-            border-radius: 8px;
+        .wallet-status.connected {
+            display: flex;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #7ee787;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        /* Error state */
+        .error-message {
+            background: #f85149;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin: 8px 0;
             display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        /* Success state */
+        .transaction-receipt {
+            background: #0d1117;
+            border: 1px solid #238636;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 20px;
+            display: none;
+        }
+        
+        .receipt-title {
+            color: #7ee787;
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+        
+        .receipt-line {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-size: 12px;
+        }
+        
+        .receipt-label {
+            color: #8b949e;
+        }
+        
+        .receipt-value {
+            color: #c9d1d9;
+            font-family: 'JetBrains Mono', monospace;
         }
         
         .loading-spinner {
             display: inline-block;
             width: 14px;
             height: 14px;
-            border: 2px solid #fff;
+            border: 2px solid #0d1117;
             border-radius: 50%;
             border-top-color: transparent;
             animation: spin 0.8s linear infinite;
@@ -140,45 +322,123 @@
         }
         
         @media (max-width: 600px) {
-            .input-wrapper {
-                font-size: 20px;
+            .contract-container {
+                border-radius: 0;
+            }
+            
+            .code-content {
+                font-size: 12px;
             }
             
             .name-input {
-                font-size: 20px;
-                min-width: 140px;
-                padding: 4px 10px;
+                font-size: 12px;
+                width: 140px;
             }
             
-            .connect-button {
-                font-size: 16px;
-                padding: 14px 36px;
+            .execute-button {
+                font-size: 12px;
+                padding: 8px 20px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="error-message" id="errorMessage"></div>
-        
-        <div class="input-wrapper">
-            <span class="prefix">i_am_</span>
-            <input 
-                type="text" 
-                class="name-input" 
-                id="nameInput" 
-                placeholder="your_name" 
-                maxlength="14"
-                autocomplete="off"
-                spellcheck="false"
-            >
-            <span class="suffix">_dave</span>
+    <div class="contract-container">
+        <!-- Header -->
+        <div class="contract-header">
+            <span class="file-icon">📄</span>
+            <span class="filename">DeclarationOfTheDaves.sol</span>
+            <span class="network-badge">Base Mainnet</span>
         </div>
         
-        <button class="connect-button" id="connectButton">CONNECT</button>
+        <!-- Wallet Status -->
+        <div class="wallet-status" id="walletStatus">
+            <span class="status-dot"></span>
+            <span id="walletAddress">Connected</span>
+        </div>
         
-        <div class="info-text" id="infoText"></div>
-        <div class="success-message" id="successMessage"></div>
+        <!-- Code Editor -->
+        <div class="code-editor">
+            <div class="line-numbers">
+                <div>1</div>
+                <div>2</div>
+                <div>3</div>
+                <div>4</div>
+                <div>5</div>
+                <div>6</div>
+                <div>7</div>
+                <div>8</div>
+                <div>9</div>
+                <div>10</div>
+                <div>11</div>
+                <div>12</div>
+                <div>13</div>
+                <div>14</div>
+                <div>15</div>
+                <div>16</div>
+                <div>17</div>
+            </div>
+            
+            <div class="code-content">
+                <div><span class="keyword">pragma</span> <span class="type">solidity</span> ^0.8.19;</div>
+                <br>
+                <div class="comment">/**</div>
+                <div class="comment"> * @title THE DECLARATION OF THE DAVES 001</div>
+                <div class="comment"> * @notice THE BANKSY STAYS ON THE WALL</div>
+                <div class="comment"> * @dev This contract is the art. Immutable. Permanent. Public.</div>
+                <div class="comment"> * @dev Co-sign the declaration by calling this function</div>
+                <div class="comment"> */</div>
+                <br>
+                <div><span class="keyword">function</span> <span class="function-name">cosignDeclaration</span>(<span class="type">string</span> <span class="type">memory</span> <span class="parameter">chosenName</span>) <span class="keyword">public</span> {</div>
+                <div style="margin-left: 20px;">
+                    <div class="comment">// Enter your chosen name (lowercase, max 14 chars)</div>
+                    <div class="input-line" id="inputLine" onclick="focusInput()">
+                        <span class="input-prefix">require(chosenName == "</span>
+                        <input type="text" class="name-input" id="nameInput" placeholder="your_name" maxlength="14" autocomplete="off" spellcheck="false">
+                        <span class="input-suffix">", "Enter name");</span>
+                    </div>
+                    <div class="preview-comment">
+                        <span class="comment">// Your signature will be: </span>
+                        <span class="string" id="preview">i_am_your_name_dave</span>
+                    </div>
+                </div>
+                <div>}</div>
+                
+                <div class="error-message" id="errorMsg">
+                    ⚠️ <span id="errorText">Name can only contain lowercase letters, numbers, and hyphens</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Action Section -->
+        <div class="action-section">
+            <div class="gas-estimate">
+                <div id="gasEstimate">Gas estimate: ~0.0003 ETH</div>
+                <div class="address">Contract: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA</div>
+            </div>
+            <button class="execute-button" id="executeButton">CONNECT WALLET</button>
+        </div>
+        
+        <!-- Success Receipt -->
+        <div class="transaction-receipt" id="receipt">
+            <div class="receipt-title">✓ Transaction Confirmed</div>
+            <div class="receipt-line">
+                <span class="receipt-label">Block Number:</span>
+                <span class="receipt-value" id="blockNumber">-</span>
+            </div>
+            <div class="receipt-line">
+                <span class="receipt-label">Signature:</span>
+                <span class="receipt-value" id="signature">-</span>
+            </div>
+            <div class="receipt-line">
+                <span class="receipt-label">Gas Used:</span>
+                <span class="receipt-value" id="gasUsed">-</span>
+            </div>
+            <div class="receipt-line">
+                <span class="receipt-label">Transaction Hash:</span>
+                <span class="receipt-value" id="txHash" style="font-size: 10px;">-</span>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -193,8 +453,7 @@
                 altScript.src = 'https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js';
                 altScript.onload = callback;
                 altScript.onerror = function() {
-                    document.getElementById('errorMessage').textContent = 'Failed to load Web3 library. Please refresh the page.';
-                    document.getElementById('errorMessage').classList.add('show');
+                    showError('Failed to load Web3 library. Please refresh the page.');
                 };
                 document.head.appendChild(altScript);
             };
@@ -203,7 +462,7 @@
         
         // Initialize widget after ethers loads
         loadEthers(function() {
-            console.log('[Dave Widget] Ethers loaded successfully');
+            console.log('[Dave Contract] Ethers loaded successfully');
             
             // Contract details
             const CONTRACT_ADDRESS = '0xB0731E7ea189c169640Fd890E5dcE9811040D0eA';
@@ -216,7 +475,8 @@
                 "function signatureByAddress(address) public view returns (string)",
                 "function nameExists(string) public view returns (bool)",
                 "function isAllowlistActive() public view returns (bool)",
-                "function timeUntilPublic() public view returns (uint256)"
+                "function timeUntilPublic() public view returns (uint256)",
+                "event DeclarationSigned(address indexed signatory, string daveName, uint256 signatureNumber, uint256 blockNumber)"
             ];
             
             // State
@@ -227,32 +487,63 @@
             let userAddress = null;
             
             // Elements
-            const connectButton = document.getElementById('connectButton');
+            const executeButton = document.getElementById('executeButton');
             const nameInput = document.getElementById('nameInput');
-            const errorMessage = document.getElementById('errorMessage');
-            const infoText = document.getElementById('infoText');
-            const successMessage = document.getElementById('successMessage');
+            const errorMsg = document.getElementById('errorMsg');
+            const errorText = document.getElementById('errorText');
+            const walletStatus = document.getElementById('walletStatus');
+            const walletAddress = document.getElementById('walletAddress');
+            const preview = document.getElementById('preview');
+            const inputLine = document.getElementById('inputLine');
+            const receipt = document.getElementById('receipt');
+            
+            // Focus input helper
+            window.focusInput = function() {
+                nameInput.focus();
+            };
+            
+            // Input handlers
+            nameInput.addEventListener('focus', () => {
+                inputLine.classList.add('focused');
+            });
+            
+            nameInput.addEventListener('blur', () => {
+                inputLine.classList.remove('focused');
+            });
+            
+            nameInput.addEventListener('input', (e) => {
+                const value = e.target.value.toLowerCase();
+                e.target.value = value;
+                
+                if (value) {
+                    preview.textContent = `i_am_${value}_dave`;
+                } else {
+                    preview.textContent = 'i_am_your_name_dave';
+                }
+                
+                // Clear error on typing
+                errorMsg.classList.remove('show');
+            });
             
             // Error handling
             function showError(message) {
-                console.error('[Dave Widget] Error:', message);
-                errorMessage.textContent = message;
-                errorMessage.classList.add('show');
+                console.error('[Dave Contract] Error:', message);
+                errorText.textContent = message;
+                errorMsg.classList.add('show');
                 setTimeout(() => {
-                    errorMessage.classList.remove('show');
+                    errorMsg.classList.remove('show');
                 }, 7000);
             }
             
             function clearMessages() {
-                errorMessage.classList.remove('show');
-                successMessage.style.display = 'none';
+                errorMsg.classList.remove('show');
             }
             
             // Connect wallet
             async function connectWallet() {
                 try {
                     clearMessages();
-                    console.log('[Dave Widget] Starting connection...');
+                    console.log('[Dave Contract] Starting connection...');
                     
                     // Check for wallet
                     if (typeof window.ethereum === 'undefined') {
@@ -260,8 +551,8 @@
                         return;
                     }
                     
-                    connectButton.disabled = true;
-                    connectButton.innerHTML = 'CONNECTING...';
+                    executeButton.disabled = true;
+                    executeButton.innerHTML = 'CONNECTING...';
                     
                     // Request accounts
                     let accounts;
@@ -269,7 +560,7 @@
                         accounts = await window.ethereum.request({ 
                             method: 'eth_requestAccounts' 
                         });
-                        console.log('[Dave Widget] Accounts:', accounts);
+                        console.log('[Dave Contract] Accounts:', accounts);
                     } catch (err) {
                         if (err.code === -32002) {
                             showError('Please unlock MetaMask');
@@ -278,8 +569,8 @@
                         } else {
                             showError('Failed to get accounts');
                         }
-                        connectButton.disabled = false;
-                        connectButton.innerHTML = 'CONNECT';
+                        executeButton.disabled = false;
+                        executeButton.innerHTML = 'CONNECT WALLET';
                         return;
                     }
                     
@@ -289,7 +580,7 @@
                     
                     // Get current chain
                     const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-                    console.log('[Dave Widget] Current chain:', chainId);
+                    console.log('[Dave Contract] Current chain:', chainId);
                     
                     // Switch to Base if needed
                     if (chainId !== BASE_CHAIN_ID) {
@@ -317,23 +608,23 @@
                                     });
                                 } catch (addError) {
                                     showError('Please add Base network to your wallet');
-                                    connectButton.disabled = false;
-                                    connectButton.innerHTML = 'CONNECT';
+                                    executeButton.disabled = false;
+                                    executeButton.innerHTML = 'CONNECT WALLET';
                                     return;
                                 }
                             } else {
                                 showError('Please switch to Base network');
-                                connectButton.disabled = false;
-                                connectButton.innerHTML = 'CONNECT';
+                                executeButton.disabled = false;
+                                executeButton.innerHTML = 'CONNECT WALLET';
                                 return;
                             }
                         }
                     }
                     
-                    // Setup provider - using window.ethers
+                    // Setup provider
                     provider = new window.ethers.providers.Web3Provider(window.ethereum);
                     const network = await provider.getNetwork();
-                    console.log('[Dave Widget] Network:', network);
+                    console.log('[Dave Contract] Network:', network);
                     
                     if (network.chainId !== BASE_CHAIN_ID_DEC) {
                         throw new Error('Wrong network after switch');
@@ -341,7 +632,7 @@
                     
                     signer = provider.getSigner();
                     userAddress = await signer.getAddress();
-                    console.log('[Dave Widget] User address:', userAddress);
+                    console.log('[Dave Contract] User address:', userAddress);
                     
                     // Setup contract
                     contract = new window.ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
@@ -352,40 +643,26 @@
                         if (hasSigned) {
                             const signature = await contract.signatureByAddress(userAddress);
                             showError(`Already signed as: ${signature}`);
-                            connectButton.disabled = false;
-                            connectButton.innerHTML = 'CONNECT';
+                            executeButton.disabled = false;
+                            executeButton.innerHTML = 'CONNECT WALLET';
                             return;
                         }
                     } catch (err) {
-                        console.error('[Dave Widget] Error checking signature:', err);
+                        console.error('[Dave Contract] Error checking signature:', err);
                     }
                     
                     // Success
                     connected = true;
-                    connectButton.innerHTML = 'COSIGN';
-                    connectButton.disabled = false;
-                    infoText.textContent = `Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
-                    console.log('[Dave Widget] Connection successful!');
-                    
-                    // Check allowlist
-                    try {
-                        const isAllowlistActive = await contract.isAllowlistActive();
-                        if (isAllowlistActive) {
-                            const timeUntilPublic = await contract.timeUntilPublic();
-                            const hours = Math.floor(timeUntilPublic / 3600);
-                            const minutes = Math.floor((timeUntilPublic % 3600) / 60);
-                            if (hours > 0 || minutes > 0) {
-                                infoText.textContent += ` | Allowlist: ${hours}h ${minutes}m remaining`;
-                            }
-                        }
-                    } catch (e) {
-                        console.error('[Dave Widget] Allowlist check error:', e);
-                    }
+                    executeButton.innerHTML = 'EXECUTE TRANSACTION';
+                    executeButton.disabled = false;
+                    walletAddress.textContent = `Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
+                    walletStatus.classList.add('connected');
+                    console.log('[Dave Contract] Connection successful!');
                     
                 } catch (error) {
-                    console.error('[Dave Widget] Connection error:', error);
-                    connectButton.disabled = false;
-                    connectButton.innerHTML = 'CONNECT';
+                    console.error('[Dave Contract] Connection error:', error);
+                    executeButton.disabled = false;
+                    executeButton.innerHTML = 'CONNECT WALLET';
                     showError('Connection failed. Please try again.');
                 }
             }
@@ -422,34 +699,39 @@
                     }
                     
                     // Sign
-                    connectButton.disabled = true;
-                    connectButton.innerHTML = 'SIGNING<span class="loading-spinner"></span>';
+                    executeButton.disabled = true;
+                    executeButton.innerHTML = 'SIGNING<span class="loading-spinner"></span>';
                     
                     const tx = await contract.cosignDeclaration(name);
-                    console.log('[Dave Widget] Transaction sent:', tx.hash);
+                    console.log('[Dave Contract] Transaction sent:', tx.hash);
                     
-                    connectButton.innerHTML = 'CONFIRMING<span class="loading-spinner"></span>';
+                    executeButton.innerHTML = 'CONFIRMING<span class="loading-spinner"></span>';
                     
-                    const receipt = await tx.wait();
-                    console.log('[Dave Widget] Transaction confirmed');
+                    const txReceipt = await tx.wait();
+                    console.log('[Dave Contract] Transaction confirmed');
                     
-                    // Success
-                    successMessage.textContent = `Successfully signed as: ${fullName}`;
-                    successMessage.style.display = 'block';
-                    nameInput.value = '';
-                    connectButton.innerHTML = 'SIGNED';
-                    connectButton.disabled = true;
+                    // Show receipt
+                    document.getElementById('blockNumber').textContent = txReceipt.blockNumber.toString();
+                    document.getElementById('signature').textContent = fullName;
+                    document.getElementById('gasUsed').textContent = txReceipt.gasUsed.toString();
+                    document.getElementById('txHash').textContent = tx.hash;
                     
-                    // Get signature number
-                    const event = receipt.events?.find(e => e.event === 'DeclarationSigned');
+                    // Get signature number from event
+                    const event = txReceipt.events?.find(e => e.event === 'DeclarationSigned');
                     if (event) {
-                        successMessage.textContent += ` | Signature #${event.args.signatureNumber}`;
+                        document.getElementById('signature').textContent = `${fullName} (#${event.args.signatureNumber})`;
                     }
                     
+                    receipt.style.display = 'block';
+                    nameInput.value = '';
+                    preview.textContent = 'i_am_your_name_dave';
+                    executeButton.innerHTML = 'SIGNED';
+                    executeButton.disabled = true;
+                    
                 } catch (error) {
-                    console.error('[Dave Widget] Sign error:', error);
-                    connectButton.disabled = false;
-                    connectButton.innerHTML = 'COSIGN';
+                    console.error('[Dave Contract] Sign error:', error);
+                    executeButton.disabled = false;
+                    executeButton.innerHTML = 'EXECUTE TRANSACTION';
                     
                     if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
                         showError('Transaction cancelled');
@@ -461,8 +743,8 @@
                 }
             }
             
-            // Event handlers
-            connectButton.addEventListener('click', async () => {
+            // Button handler
+            executeButton.addEventListener('click', async () => {
                 if (!connected) {
                     await connectWallet();
                 } else {
@@ -470,6 +752,7 @@
                 }
             });
             
+            // Enter key
             nameInput.addEventListener('keypress', async (e) => {
                 if (e.key === 'Enter' && connected) {
                     await signDeclaration();
@@ -481,9 +764,9 @@
                 window.ethereum.on('accountsChanged', (accounts) => {
                     if (accounts.length === 0) {
                         connected = false;
-                        connectButton.innerHTML = 'CONNECT';
-                        connectButton.disabled = false;
-                        infoText.textContent = '';
+                        executeButton.innerHTML = 'CONNECT WALLET';
+                        executeButton.disabled = false;
+                        walletStatus.classList.remove('connected');
                         clearMessages();
                     } else if (connected && accounts[0].toLowerCase() !== userAddress.toLowerCase()) {
                         connected = false;
@@ -495,8 +778,8 @@
                     if (connected && chainId !== BASE_CHAIN_ID) {
                         showError('Please switch back to Base network');
                         connected = false;
-                        connectButton.innerHTML = 'CONNECT';
-                        connectButton.disabled = false;
+                        executeButton.innerHTML = 'CONNECT WALLET';
+                        executeButton.disabled = false;
                     }
                 });
             }
