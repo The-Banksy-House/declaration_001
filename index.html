@@ -29,13 +29,22 @@
             padding: 20px;
         }
         
+        .widget-container {
+            max-width: 600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        /* Main contract container - square format */
         .contract-container {
             background: #161b22;
             border: 1px solid #30363d;
             border-radius: 6px;
             width: 100%;
-            max-width: 800px;
+            aspect-ratio: 1;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
         
         .contract-header {
@@ -66,28 +75,32 @@
         }
         
         .code-editor {
-            padding: 20px 0;
-            min-height: 400px;
+            flex: 1;
             position: relative;
+            display: flex;
+            align-items: center;
+            padding: 40px 0;
         }
         
         .line-numbers {
             position: absolute;
-            left: 0;
-            top: 20px;
-            width: 50px;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 30px;
             text-align: right;
             color: #484f58;
-            font-size: 14px;
-            line-height: 22px;
+            font-size: 12px;
+            line-height: 20px;
             user-select: none;
         }
         
         .code-content {
             margin-left: 70px;
-            margin-right: 20px;
-            font-size: 14px;
-            line-height: 22px;
+            margin-right: 40px;
+            font-size: 12px;
+            line-height: 20px;
+            width: calc(100% - 110px);
         }
         
         /* Syntax highlighting */
@@ -119,6 +132,12 @@
         .address {
             color: #7ee787;
             font-size: 12px;
+            word-break: break-all;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .number {
+            color: #79c0ff;
         }
         
         /* Input styling */
@@ -128,9 +147,10 @@
             border-radius: 4px;
             padding: 8px 12px;
             margin: 8px 0;
-            display: flex;
+            display: inline-flex;
             align-items: center;
             transition: border-color 0.2s;
+            white-space: nowrap;
         }
         
         .input-line:hover {
@@ -142,8 +162,9 @@
             box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
         }
         
-        .input-prefix {
+        .input-prefix, .input-suffix {
             color: #a5d6ff;
+            font-size: 12px;
         }
         
         .name-input {
@@ -151,29 +172,10 @@
             border: none;
             color: #a5d6ff;
             font-family: inherit;
-            font-size: 14px;
+            font-size: 12px;
             outline: none;
-            width: 200px;
+            width: 140px;
             margin: 0 4px;
-        }
-        
-        .input-suffix {
-            color: #a5d6ff;
-        }
-        
-        .cursor {
-            display: inline-block;
-            width: 2px;
-            height: 16px;
-            background: #58a6ff;
-            animation: blink 1s infinite;
-            vertical-align: text-bottom;
-            display: none;
-        }
-        
-        @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
         }
         
         /* Preview section */
@@ -182,6 +184,15 @@
             padding: 8px;
             background: #0d1117;
             border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .preview-comment .comment {
+            font-size: 12px;
+        }
+        
+        .preview-comment .string {
+            font-size: 12px;
         }
         
         /* Action section */
@@ -273,36 +284,78 @@
             display: block;
         }
         
-        /* Success state */
-        .transaction-receipt {
-            background: #0d1117;
-            border: 1px solid #238636;
+        /* NFT Preview - Square format */
+        .nft-container {
+            background: #161b22;
+            border: 1px solid #30363d;
             border-radius: 6px;
-            padding: 20px;
-            margin: 20px;
+            width: 100%;
+            aspect-ratio: 1;
+            margin: 40px auto 20px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .nft-container.show {
+            display: flex;
+        }
+        
+        .nft-code-editor {
+            position: relative;
+            width: 100%;
+            padding: 40px 0;
+        }
+        
+        .nft-line-numbers {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 30px;
+            text-align: right;
+            color: #484f58;
+            font-size: 12px;
+            line-height: 20px;
+            user-select: none;
+        }
+        
+        .nft-code-content {
+            margin-left: 70px;
+            margin-right: 40px;
+            font-size: 12px;
+            line-height: 20px;
+        }
+        
+        /* Mint button */
+        .mint-button-container {
+            text-align: center;
+            margin-bottom: 40px;
             display: none;
         }
         
-        .receipt-title {
-            color: #7ee787;
-            font-size: 16px;
-            margin-bottom: 12px;
+        .mint-button-container.show {
+            display: block;
         }
         
-        .receipt-line {
-            display: flex;
-            justify-content: space-between;
-            margin: 8px 0;
-            font-size: 12px;
+        .mint-button {
+            background: #f78166;
+            color: #0d1117;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         
-        .receipt-label {
-            color: #8b949e;
-        }
-        
-        .receipt-value {
-            color: #c9d1d9;
-            font-family: 'JetBrains Mono', monospace;
+        .mint-button:hover {
+            background: #ff8c73;
+            transform: translateY(-1px);
         }
         
         .loading-spinner {
@@ -327,12 +380,12 @@
             }
             
             .code-content {
-                font-size: 12px;
+                font-size: 11px;
             }
             
             .name-input {
-                font-size: 12px;
-                width: 140px;
+                font-size: 11px;
+                width: 120px;
             }
             
             .execute-button {
@@ -343,101 +396,114 @@
     </style>
 </head>
 <body>
-    <div class="contract-container">
-        <!-- Header -->
-        <div class="contract-header">
-            <span class="file-icon">📄</span>
-            <span class="filename">DeclarationOfTheDaves.sol</span>
-            <span class="network-badge">Base Mainnet</span>
-        </div>
-        
-        <!-- Wallet Status -->
-        <div class="wallet-status" id="walletStatus">
-            <span class="status-dot"></span>
-            <span id="walletAddress">Connected</span>
-        </div>
-        
-        <!-- Code Editor -->
-        <div class="code-editor">
-            <div class="line-numbers">
-                <div>1</div>
-                <div>2</div>
-                <div>3</div>
-                <div>4</div>
-                <div>5</div>
-                <div>6</div>
-                <div>7</div>
-                <div>8</div>
-                <div>9</div>
-                <div>10</div>
-                <div>11</div>
-                <div>12</div>
-                <div>13</div>
-                <div>14</div>
-                <div>15</div>
-                <div>16</div>
-                <div>17</div>
+    <div class="widget-container">
+        <!-- Main Widget -->
+        <div class="contract-container">
+            <!-- Header -->
+            <div class="contract-header">
+                <span class="file-icon">📄</span>
+                <span class="filename">DeclarationOfTheDaves.sol</span>
+                <span class="network-badge">Base Mainnet</span>
             </div>
             
-            <div class="code-content">
-                <div><span class="keyword">pragma</span> <span class="type">solidity</span> ^0.8.19;</div>
-                <br>
-                <div class="comment">/**</div>
-                <div class="comment"> * @title THE DECLARATION OF THE DAVES 001</div>
-                <div class="comment"> * @notice THE BANKSY STAYS ON THE WALL</div>
-                <div class="comment"> * @dev This contract is the art. Immutable. Permanent. Public.</div>
-                <div class="comment"> * @dev Co-sign the declaration by calling this function</div>
-                <div class="comment"> */</div>
-                <br>
-                <div><span class="keyword">function</span> <span class="function-name">cosignDeclaration</span>(<span class="type">string</span> <span class="type">memory</span> <span class="parameter">chosenName</span>) <span class="keyword">public</span> {</div>
-                <div style="margin-left: 20px;">
-                    <div class="comment">// Enter your chosen name (lowercase, max 14 chars)</div>
-                    <div class="input-line" id="inputLine" onclick="focusInput()">
-                        <span class="input-prefix">require(chosenName == "</span>
-                        <input type="text" class="name-input" id="nameInput" placeholder="your_name" maxlength="14" autocomplete="off" spellcheck="false">
-                        <span class="input-suffix">", "Enter name");</span>
-                    </div>
-                    <div class="preview-comment">
-                        <span class="comment">// Your signature will be: </span>
-                        <span class="string" id="preview">i_am_your_name_dave</span>
-                    </div>
+            <!-- Wallet Status -->
+            <div class="wallet-status" id="walletStatus">
+                <span class="status-dot"></span>
+                <span id="walletAddress">Connected</span>
+            </div>
+            
+            <!-- Code Editor -->
+            <div class="code-editor">
+                <div class="line-numbers">
+                    <div>1</div>
+                    <div>2</div>
+                    <div>3</div>
+                    <div>4</div>
+                    <div>5</div>
+                    <div>6</div>
+                    <div>7</div>
+                    <div>8</div>
+                    <div>9</div>
+                    <div>10</div>
+                    <div>11</div>
+                    <div>12</div>
+                    <div>13</div>
+                    <div>14</div>
+                    <div>15</div>
+                    <div>16</div>
+                    <div>17</div>
                 </div>
-                <div>}</div>
                 
-                <div class="error-message" id="errorMsg">
-                    ⚠️ <span id="errorText">Name can only contain lowercase letters, numbers, and hyphens</span>
+                <div class="code-content">
+                    <div><span class="keyword">pragma</span> <span class="type">solidity</span> ^0.8.19;</div>
+                    <br>
+                    <div class="comment">/**</div>
+                    <div class="comment"> * @title THE DECLARATION OF THE DAVES 001</div>
+                    <div class="comment"> * @notice THE BANKSY STAYS ON THE WALL</div>
+                    <div class="comment"> * @dev This contract is the art. Immutable. Permanent. Public.</div>
+                    <div class="comment"> * @dev Co-sign the declaration by calling this function</div>
+                    <div class="comment"> */</div>
+                    <br>
+                    <div><span class="keyword">function</span> <span class="function-name">cosignDeclaration</span>(<span class="type">string</span> <span class="type">memory</span> <span class="parameter">chosenName</span>) <span class="keyword">public</span> {</div>
+                    <div style="margin-left: 20px;">
+                        <div class="comment">// Enter your chosen name (lowercase, max 14 chars)</div>
+                        <div class="input-line" id="inputLine" onclick="focusInput()">
+                            <span class="input-prefix">require(chosenName == "</span>
+                            <input type="text" class="name-input" id="nameInput" placeholder="your_name" maxlength="14" autocomplete="off" spellcheck="false">
+                            <span class="input-suffix">", "Enter name");</span>
+                        </div>
+                        <div class="preview-comment">
+                            <span class="comment">// Your signature will be: </span>
+                            <span class="string" id="preview">i_am_your_name_dave</span>
+                        </div>
+                    </div>
+                    <div>}</div>
+                    
+                    <div class="error-message" id="errorMsg">
+                        ⚠️ <span id="errorText">Name can only contain lowercase letters, numbers, and hyphens</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Action Section -->
+            <div class="action-section">
+                <div class="gas-estimate">
+                    <div id="gasEstimate">Gas estimate: ~0.0003 ETH</div>
+                    <div class="address">Contract: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA</div>
+                </div>
+                <button class="execute-button" id="executeButton">CONNECT WALLET</button>
+            </div>
+        </div>
+        
+        <!-- NFT Preview (hidden until transaction complete) -->
+        <div class="nft-container" id="nftPreview">
+            <div class="nft-code-editor">
+                <div class="nft-line-numbers">
+                    <div>1</div>
+                    <div>2</div>
+                    <div>3</div>
+                    <div>4</div>
+                    <div>5</div>
+                    <div>6</div>
+                    <div>7</div>
+                    <div>8</div>
+                    <div>9</div>
+                    <div>10</div>
+                    <div>11</div>
+                    <div>12</div>
+                    <div>13</div>
+                    <div>14</div>
+                </div>
+                
+                <div class="nft-code-content" id="nftContent">
+                    <!-- NFT content will be populated dynamically -->
                 </div>
             </div>
         </div>
         
-        <!-- Action Section -->
-        <div class="action-section">
-            <div class="gas-estimate">
-                <div id="gasEstimate">Gas estimate: ~0.0003 ETH</div>
-                <div class="address">Contract: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA</div>
-            </div>
-            <button class="execute-button" id="executeButton">CONNECT WALLET</button>
-        </div>
-        
-        <!-- Success Receipt -->
-        <div class="transaction-receipt" id="receipt">
-            <div class="receipt-title">✓ Transaction Confirmed</div>
-            <div class="receipt-line">
-                <span class="receipt-label">Block Number:</span>
-                <span class="receipt-value" id="blockNumber">-</span>
-            </div>
-            <div class="receipt-line">
-                <span class="receipt-label">Signature:</span>
-                <span class="receipt-value" id="signature">-</span>
-            </div>
-            <div class="receipt-line">
-                <span class="receipt-label">Gas Used:</span>
-                <span class="receipt-value" id="gasUsed">-</span>
-            </div>
-            <div class="receipt-line">
-                <span class="receipt-label">Transaction Hash:</span>
-                <span class="receipt-value" id="txHash" style="font-size: 10px;">-</span>
-            </div>
+        <!-- Mint Button (hidden until transaction complete) -->
+        <div class="mint-button-container" id="mintButtonContainer">
+            <button class="mint-button" id="mintButton">MINT AS NFT</button>
         </div>
     </div>
 
@@ -495,7 +561,9 @@
             const walletAddress = document.getElementById('walletAddress');
             const preview = document.getElementById('preview');
             const inputLine = document.getElementById('inputLine');
-            const receipt = document.getElementById('receipt');
+            const nftPreview = document.getElementById('nftPreview');
+            const nftContent = document.getElementById('nftContent');
+            const mintButtonContainer = document.getElementById('mintButtonContainer');
             
             // Focus input helper
             window.focusInput = function() {
@@ -537,6 +605,26 @@
             
             function clearMessages() {
                 errorMsg.classList.remove('show');
+            }
+            
+            // Generate NFT preview content
+            function generateNFTPreview(daveName, signatureNumber, blockNumber, txHash, signerAddr) {
+                const shortName = daveName.replace('i_am_', '').replace('_dave', '');
+                return `<div class="comment">/**</div>
+<div class="comment"> * @title THE DECLARATION OF THE DAVES 001</div>
+<div class="comment"> * Contract: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA</div>
+<div class="comment"> * @notice THE BANKSY STAYS ON THE WALL</div>
+<div class="comment"> * Signed by: <span class="number">${shortName}_dave</span></div>
+<div class="comment"> */</div>
+<br>
+<div class="comment">// Signature Number: <span class="number">#${signatureNumber}</span></div>
+<div class="comment">// Block Number: <span class="number">${blockNumber}</span></div>
+<br>
+<div class="comment">// Transaction Hash:</div>
+<div class="address">${txHash}</div>
+<br>
+<div class="comment">// Signer Address:</div>
+<div class="address">${signerAddr}</div>`;
             }
             
             // Connect wallet
@@ -710,24 +798,31 @@
                     const txReceipt = await tx.wait();
                     console.log('[Dave Contract] Transaction confirmed');
                     
-                    // Show receipt
-                    document.getElementById('blockNumber').textContent = txReceipt.blockNumber.toString();
-                    document.getElementById('signature').textContent = fullName;
-                    document.getElementById('gasUsed').textContent = txReceipt.gasUsed.toString();
-                    document.getElementById('txHash').textContent = tx.hash;
-                    
                     // Get signature number from event
+                    let signatureNumber = 'N/A';
                     const event = txReceipt.events?.find(e => e.event === 'DeclarationSigned');
                     if (event) {
-                        document.getElementById('signature').textContent = `${fullName} (#${event.args.signatureNumber})`;
+                        signatureNumber = event.args.signatureNumber.toString();
                     }
                     
-                    receipt.style.display = 'block';
+                    // Update UI to show NFT preview
                     nameInput.value = '';
                     document.querySelector('.preview-comment .comment').textContent = '// ';
                     preview.textContent = 'THE BANKSY STAYS ON THE WALL';
                     executeButton.innerHTML = 'SIGNED';
                     executeButton.disabled = true;
+                    
+                    // Generate and show NFT preview
+                    nftContent.innerHTML = generateNFTPreview(
+                        fullName,
+                        signatureNumber,
+                        txReceipt.blockNumber,
+                        tx.hash,
+                        userAddress
+                    );
+                    
+                    nftPreview.classList.add('show');
+                    mintButtonContainer.classList.add('show');
                     
                 } catch (error) {
                     console.error('[Dave Contract] Sign error:', error);
