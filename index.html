@@ -595,7 +595,10 @@
             
             // Contract details
             const CONTRACT_ADDRESS = '0xB0731E7ea189c169640Fd890E5dcE9811040D0eA';
-            const NFT_CONTRACT_ADDRESS = 'YOUR_NFT_CONTRACT_ADDRESS_HERE'; // TODO: Add after deployment
+            
+            // TODO: REPLACE THIS WITH YOUR DEPLOYED NFT CONTRACT ADDRESS
+            const NFT_CONTRACT_ADDRESS = 'YOUR_NFT_CONTRACT_ADDRESS_HERE';
+            
             const BASE_CHAIN_ID = '0x2105'; // 8453 in hex
             const BASE_CHAIN_ID_DEC = 8453;
             
@@ -773,7 +776,7 @@
                     signatureData.daveName,
                     signatureData.signatureNumber,
                     signatureData.blockNumber,
-                    '0x... (original transaction hash not available)',
+                    '0x... (retroactive mint - original tx not stored)',
                     userAddress
                 );
                 
@@ -792,8 +795,8 @@
                     // Can mint - show mint button
                     mintButtonContainer.classList.add('show');
                     
-                    // Note about tx hash
-                    mintButton.title = 'Note: Original transaction hash will be set to 0x0 for retroactive mints';
+                    // Note about retroactive mint
+                    mintButton.title = 'Retroactive mint - will be marked as pre-NFT signature';
                 }
                 
                 // Send resize message to parent
@@ -1056,7 +1059,7 @@
                     // Get mint price
                     const mintPrice = await nftContract.MINT_PRICE();
                     
-                    // Use current tx hash if available, otherwise use empty bytes32
+                    // Use current tx hash if available, otherwise use empty bytes32 for retroactive
                     const txHashToUse = currentTxHash || '0x0000000000000000000000000000000000000000000000000000000000000000';
                     
                     // Mint NFT
