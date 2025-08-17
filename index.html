@@ -844,6 +844,16 @@
                     nftPreview.classList.add('show');
                     mintButtonContainer.classList.add('show');
                     
+                    // Send resize message to parent
+                    setTimeout(() => {
+                        if (window.parent !== window) {
+                            window.parent.postMessage({
+                                type: 'resize',
+                                height: document.body.scrollHeight
+                            }, '*');
+                        }
+                    }, 100);
+                    
                 } catch (error) {
                     console.error('[Dave Contract] Sign error:', error);
                     executeButton.disabled = false;
