@@ -724,7 +724,8 @@
                     
                     receipt.style.display = 'block';
                     nameInput.value = '';
-                    preview.textContent = 'i_am_your_name_dave';
+                    document.querySelector('.preview-comment .comment').textContent = '// ';
+                    preview.textContent = 'THE BANKSY STAYS ON THE WALL';
                     executeButton.innerHTML = 'SIGNED';
                     executeButton.disabled = true;
                     
