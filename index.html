@@ -205,9 +205,24 @@
             justify-content: space-between;
         }
         
-        .gas-estimate {
+        .contract-info {
             font-size: 12px;
+        }
+        
+        .contract-label {
             color: #8b949e;
+            margin-bottom: 4px;
+        }
+        
+        .contract-address-link {
+            color: #7ee787;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+        
+        .contract-address-link:hover {
+            opacity: 0.8;
+            text-decoration: underline;
         }
         
         .execute-button {
@@ -467,9 +482,14 @@
             
             <!-- Action Section -->
             <div class="action-section">
-                <div class="gas-estimate">
-                    <div id="gasEstimate">Gas estimate: ~0.0003 ETH</div>
-                    <div class="address">Contract: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA</div>
+                <div class="contract-info">
+                    <div class="contract-label">Contract</div>
+                    <a href="https://basescan.org/address/0xB0731E7ea189c169640Fd890E5dcE9811040D0eA#code" 
+                       target="_blank" 
+                       rel="noopener noreferrer" 
+                       class="contract-address-link">
+                        0xB0731E7ea189c169640Fd890E5dcE9811040D0eA
+                    </a>
                 </div>
                 <button class="execute-button" id="executeButton">CONNECT WALLET</button>
             </div>
