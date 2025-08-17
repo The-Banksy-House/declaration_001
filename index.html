@@ -162,6 +162,11 @@
             box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
         }
         
+        .input-line.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
         .input-prefix, .input-suffix {
             color: #a5d6ff;
             font-size: 12px;
@@ -368,9 +373,14 @@
             letter-spacing: 0.5px;
         }
         
-        .mint-button:hover {
+        .mint-button:hover:not(:disabled) {
             background: #ff8c73;
             transform: translateY(-1px);
+        }
+        
+        .mint-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
         
         .loading-spinner {
@@ -387,6 +397,31 @@
         
         @keyframes spin {
             to { transform: rotate(360deg); }
+        }
+        
+        /* Success message */
+        .success-message {
+            background: #238636;
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin: 20px 0;
+            text-align: center;
+            display: none;
+        }
+        
+        .success-message.show {
+            display: block;
+        }
+        
+        .success-message a {
+            color: #7ee787;
+            text-decoration: none;
+        }
+        
+        .success-message a:hover {
+            text-decoration: underline;
         }
         
         @media (max-width: 600px) {
@@ -495,7 +530,7 @@
             </div>
         </div>
         
-        <!-- NFT Preview (hidden until transaction complete) -->
+        <!-- NFT Preview (hidden until transaction complete or already signed) -->
         <div class="nft-container" id="nftPreview">
             <div class="nft-code-editor">
                 <div class="nft-line-numbers">
@@ -521,9 +556,17 @@
             </div>
         </div>
         
-        <!-- Mint Button (hidden until transaction complete) -->
+        <!-- Mint Button (hidden until transaction complete or already signed) -->
         <div class="mint-button-container" id="mintButtonContainer">
-            <button class="mint-button" id="mintButton">MINT AS NFT</button>
+            <button class="mint-button" id="mintButton">MINT AS NFT (0.001439 ETH)</button>
+        </div>
+        
+        <!-- Success Message -->
+        <div class="success-message" id="successMessage">
+            <div id="successText">NFT Minted Successfully!</div>
+            <div style="margin-top: 8px;">
+                <a id="openSeaLink" href="#" target="_blank" rel="noopener noreferrer">View on OpenSea →</a>
+            </div>
         </div>
     </div>
 
@@ -552,6 +595,7 @@
             
             // Contract details
             const CONTRACT_ADDRESS = '0xB0731E7ea189c169640Fd890E5dcE9811040D0eA';
+            const NFT_CONTRACT_ADDRESS = 'YOUR_NFT_CONTRACT_ADDRESS_HERE'; // TODO: Add after deployment
             const BASE_CHAIN_ID = '0x2105'; // 8453 in hex
             const BASE_CHAIN_ID_DEC = 8453;
             
@@ -559,18 +603,30 @@
                 "function cosignDeclaration(string memory chosenName) public",
                 "function hasSigned(address) public view returns (bool)",
                 "function signatureByAddress(address) public view returns (string)",
+                "function signatures(uint256) public view returns (tuple(string daveName, address signatory, uint256 timestamp, uint256 blockNumber))",
+                "function totalSignatures() public view returns (uint256)",
                 "function nameExists(string) public view returns (bool)",
                 "function isAllowlistActive() public view returns (bool)",
                 "function timeUntilPublic() public view returns (uint256)",
                 "event DeclarationSigned(address indexed signatory, string daveName, uint256 signatureNumber, uint256 blockNumber)"
             ];
             
+            const NFT_CONTRACT_ABI = [
+                "function mint(bytes32 _originalTxHash) public payable",
+                "function hasMinted(address) public view returns (bool)",
+                "function addressToTokenId(address) public view returns (uint256)",
+                "function MINT_PRICE() public view returns (uint256)"
+            ];
+            
             // State
             let provider = null;
             let signer = null;
             let contract = null;
+            let nftContract = null;
             let connected = false;
             let userAddress = null;
+            let currentTxHash = null;
+            let signatureData = null;
             
             // Elements
             const executeButton = document.getElementById('executeButton');
@@ -584,10 +640,16 @@
             const nftPreview = document.getElementById('nftPreview');
             const nftContent = document.getElementById('nftContent');
             const mintButtonContainer = document.getElementById('mintButtonContainer');
+            const mintButton = document.getElementById('mintButton');
+            const successMessage = document.getElementById('successMessage');
+            const successText = document.getElementById('successText');
+            const openSeaLink = document.getElementById('openSeaLink');
             
             // Focus input helper
             window.focusInput = function() {
-                nameInput.focus();
+                if (!nameInput.disabled) {
+                    nameInput.focus();
+                }
             };
             
             // Input handlers
@@ -645,6 +707,104 @@
 <br>
 <div class="comment">// Signer Address:</div>
 <div class="address">${signerAddr}</div>`;
+            }
+            
+            // Get signature data for an address
+            async function getSignatureData(address) {
+                try {
+                    const totalSigs = await contract.totalSignatures();
+                    
+                    // Search through signatures to find this address
+                    for (let i = 1; i <= totalSigs; i++) {
+                        const sig = await contract.signatures(i);
+                        if (sig.signatory.toLowerCase() === address.toLowerCase()) {
+                            return {
+                                daveName: sig.daveName,
+                                signatureNumber: i,
+                                blockNumber: sig.blockNumber.toString(),
+                                timestamp: sig.timestamp.toString()
+                            };
+                        }
+                    }
+                    return null;
+                } catch (error) {
+                    console.error('[Dave Contract] Error getting signature data:', error);
+                    return null;
+                }
+            }
+            
+            // Check NFT minting status
+            async function checkNFTStatus() {
+                if (!nftContract || NFT_CONTRACT_ADDRESS === 'YOUR_NFT_CONTRACT_ADDRESS_HERE') {
+                    return { canMint: true, hasMinted: false };
+                }
+                
+                try {
+                    const hasMinted = await nftContract.hasMinted(userAddress);
+                    return { canMint: !hasMinted, hasMinted };
+                } catch (error) {
+                    console.error('[Dave Contract] Error checking NFT status:', error);
+                    return { canMint: true, hasMinted: false };
+                }
+            }
+            
+            // Show NFT preview for already-signed users
+            async function showExistingSignature() {
+                // Get signature data
+                signatureData = await getSignatureData(userAddress);
+                
+                if (!signatureData) {
+                    showError('Could not retrieve signature data');
+                    return;
+                }
+                
+                // Update UI for already-signed state
+                nameInput.disabled = true;
+                nameInput.value = '';
+                inputLine.classList.add('disabled');
+                document.querySelector('.preview-comment .comment').textContent = '// ';
+                preview.textContent = 'THE BANKSY STAYS ON THE WALL';
+                executeButton.innerHTML = 'ALREADY SIGNED';
+                executeButton.disabled = true;
+                
+                // Generate and show NFT preview
+                // Note: We don't have the original tx hash, so showing placeholder
+                nftContent.innerHTML = generateNFTPreview(
+                    signatureData.daveName,
+                    signatureData.signatureNumber,
+                    signatureData.blockNumber,
+                    '0x... (original transaction hash not available)',
+                    userAddress
+                );
+                
+                nftPreview.classList.add('show');
+                
+                // Check if they can mint
+                const { canMint, hasMinted } = await checkNFTStatus();
+                
+                if (hasMinted && NFT_CONTRACT_ADDRESS !== 'YOUR_NFT_CONTRACT_ADDRESS_HERE') {
+                    // Already minted - show success message instead of mint button
+                    const tokenId = await nftContract.addressToTokenId(userAddress);
+                    successText.textContent = `You already minted NFT #${tokenId}`;
+                    openSeaLink.href = `https://opensea.io/assets/base/${NFT_CONTRACT_ADDRESS}/${tokenId}`;
+                    successMessage.classList.add('show');
+                } else if (canMint) {
+                    // Can mint - show mint button
+                    mintButtonContainer.classList.add('show');
+                    
+                    // Note about tx hash
+                    mintButton.title = 'Note: Original transaction hash will be set to 0x0 for retroactive mints';
+                }
+                
+                // Send resize message to parent
+                setTimeout(() => {
+                    if (window.parent !== window) {
+                        window.parent.postMessage({
+                            type: 'resize',
+                            height: document.body.scrollHeight
+                        }, '*');
+                    }
+                }, 100);
             }
             
             // Connect wallet
@@ -742,30 +902,32 @@
                     userAddress = await signer.getAddress();
                     console.log('[Dave Contract] User address:', userAddress);
                     
-                    // Setup contract
+                    // Setup contracts
                     contract = new window.ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
                     
-                    // Check if already signed
-                    try {
-                        const hasSigned = await contract.hasSigned(userAddress);
-                        if (hasSigned) {
-                            const signature = await contract.signatureByAddress(userAddress);
-                            showError(`Already signed as: ${signature}`);
-                            executeButton.disabled = false;
-                            executeButton.innerHTML = 'CONNECT WALLET';
-                            return;
-                        }
-                    } catch (err) {
-                        console.error('[Dave Contract] Error checking signature:', err);
+                    // Setup NFT contract if deployed
+                    if (NFT_CONTRACT_ADDRESS !== 'YOUR_NFT_CONTRACT_ADDRESS_HERE') {
+                        nftContract = new window.ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_CONTRACT_ABI, signer);
                     }
                     
-                    // Success
-                    connected = true;
-                    executeButton.innerHTML = 'EXECUTE TRANSACTION';
-                    executeButton.disabled = false;
+                    // Check if already signed
+                    const hasSigned = await contract.hasSigned(userAddress);
+                    
+                    // Update wallet status
                     walletAddress.textContent = `Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
                     walletStatus.classList.add('connected');
-                    console.log('[Dave Contract] Connection successful!');
+                    
+                    if (hasSigned) {
+                        // User already signed - show their NFT preview
+                        console.log('[Dave Contract] User already signed, showing NFT preview');
+                        await showExistingSignature();
+                    } else {
+                        // New user - enable signing
+                        connected = true;
+                        executeButton.innerHTML = 'EXECUTE TRANSACTION';
+                        executeButton.disabled = false;
+                        console.log('[Dave Contract] Connection successful! Ready to sign.');
+                    }
                     
                 } catch (error) {
                     console.error('[Dave Contract] Connection error:', error);
@@ -812,6 +974,7 @@
                     
                     const tx = await contract.cosignDeclaration(name);
                     console.log('[Dave Contract] Transaction sent:', tx.hash);
+                    currentTxHash = tx.hash;
                     
                     executeButton.innerHTML = 'CONFIRMING<span class="loading-spinner"></span>';
                     
@@ -825,8 +988,18 @@
                         signatureNumber = event.args.signatureNumber.toString();
                     }
                     
+                    // Store signature data
+                    signatureData = {
+                        daveName: fullName,
+                        signatureNumber: signatureNumber,
+                        blockNumber: txReceipt.blockNumber,
+                        timestamp: Date.now()
+                    };
+                    
                     // Update UI to show NFT preview
                     nameInput.value = '';
+                    nameInput.disabled = true;
+                    inputLine.classList.add('disabled');
                     document.querySelector('.preview-comment .comment').textContent = '// ';
                     preview.textContent = 'THE BANKSY STAYS ON THE WALL';
                     executeButton.innerHTML = 'SIGNED';
@@ -869,7 +1042,62 @@
                 }
             }
             
-            // Button handler
+            // Mint NFT
+            async function mintNFT() {
+                if (!nftContract) {
+                    showError('NFT contract not deployed yet');
+                    return;
+                }
+                
+                try {
+                    mintButton.disabled = true;
+                    mintButton.innerHTML = 'MINTING<span class="loading-spinner"></span>';
+                    
+                    // Get mint price
+                    const mintPrice = await nftContract.MINT_PRICE();
+                    
+                    // Use current tx hash if available, otherwise use empty bytes32
+                    const txHashToUse = currentTxHash || '0x0000000000000000000000000000000000000000000000000000000000000000';
+                    
+                    // Mint NFT
+                    const tx = await nftContract.mint(txHashToUse, {
+                        value: mintPrice
+                    });
+                    
+                    console.log('[Dave Contract] NFT mint transaction sent:', tx.hash);
+                    
+                    mintButton.innerHTML = 'CONFIRMING<span class="loading-spinner"></span>';
+                    
+                    const receipt = await tx.wait();
+                    console.log('[Dave Contract] NFT minted successfully');
+                    
+                    // Get token ID
+                    const tokenId = await nftContract.addressToTokenId(userAddress);
+                    
+                    // Hide mint button and show success
+                    mintButtonContainer.classList.remove('show');
+                    successText.textContent = `NFT #${tokenId} Minted Successfully!`;
+                    openSeaLink.href = `https://opensea.io/assets/base/${NFT_CONTRACT_ADDRESS}/${tokenId}`;
+                    successMessage.classList.add('show');
+                    
+                } catch (error) {
+                    console.error('[Dave Contract] Mint error:', error);
+                    mintButton.disabled = false;
+                    mintButton.innerHTML = 'MINT AS NFT (0.001439 ETH)';
+                    
+                    if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+                        showError('Transaction cancelled');
+                    } else if (error.message?.includes('Already minted')) {
+                        showError('You have already minted your NFT');
+                    } else if (error.message?.includes('Insufficient')) {
+                        showError('Insufficient funds for minting');
+                    } else {
+                        showError('Minting failed. Please try again.');
+                    }
+                }
+            }
+            
+            // Button handlers
             executeButton.addEventListener('click', async () => {
                 if (!connected) {
                     await connectWallet();
@@ -878,9 +1106,11 @@
                 }
             });
             
+            mintButton.addEventListener('click', mintNFT);
+            
             // Enter key
             nameInput.addEventListener('keypress', async (e) => {
-                if (e.key === 'Enter' && connected) {
+                if (e.key === 'Enter' && connected && !nameInput.disabled) {
                     await signDeclaration();
                 }
             });
@@ -894,9 +1124,15 @@
                         executeButton.disabled = false;
                         walletStatus.classList.remove('connected');
                         clearMessages();
+                        // Reset UI
+                        nameInput.disabled = false;
+                        inputLine.classList.remove('disabled');
+                        nftPreview.classList.remove('show');
+                        mintButtonContainer.classList.remove('show');
+                        successMessage.classList.remove('show');
                     } else if (connected && accounts[0].toLowerCase() !== userAddress.toLowerCase()) {
-                        connected = false;
-                        connectWallet();
+                        // Account changed - reconnect
+                        window.location.reload();
                     }
                 });
                 
