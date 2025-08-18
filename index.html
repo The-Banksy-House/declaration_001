@@ -615,7 +615,7 @@
             ];
             
             const NFT_CONTRACT_ABI = [
-                "function mint(bytes32 _originalTxHash) public payable",
+                "function mint(bytes32 _originalTxHash, uint256 _signatureNumber, uint256 _blockNumber) public payable",
                 "function hasMinted(address) public view returns (bool)",
                 "function addressToTokenId(address) public view returns (uint256)",
                 "function MINT_PRICE() public view returns (uint256)"
@@ -1052,6 +1052,11 @@
                     return;
                 }
                 
+                if (!signatureData) {
+                    showError('Signature data not found');
+                    return;
+                }
+                
                 try {
                     mintButton.disabled = true;
                     mintButton.innerHTML = 'MINTING<span class="loading-spinner"></span>';
@@ -1062,10 +1067,15 @@
                     // Use current tx hash if available, otherwise use empty bytes32 for retroactive
                     const txHashToUse = currentTxHash || '0x0000000000000000000000000000000000000000000000000000000000000000';
                     
-                    // Mint NFT
-                    const tx = await nftContract.mint(txHashToUse, {
-                        value: mintPrice
-                    });
+                    // Mint NFT with signature number and block number
+                    const tx = await nftContract.mint(
+                        txHashToUse,
+                        signatureData.signatureNumber,
+                        signatureData.blockNumber,
+                        {
+                            value: mintPrice
+                        }
+                    );
                     
                     console.log('[Dave Contract] NFT mint transaction sent:', tx.hash);
                     
