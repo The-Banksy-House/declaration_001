@@ -718,12 +718,13 @@
                     const totalSigs = await contract.totalSignatures();
                     
                     // Search through signatures to find this address
-                    for (let i = 1; i <= totalSigs; i++) {
+                    // NOTE: The array is 0-indexed but signature numbers are 1-indexed
+                    for (let i = 0; i < totalSigs; i++) {
                         const sig = await contract.signatures(i);
                         if (sig.signatory.toLowerCase() === address.toLowerCase()) {
                             return {
                                 daveName: sig.daveName,
-                                signatureNumber: i,
+                                signatureNumber: i + 1,  // Convert 0-indexed to 1-indexed
                                 blockNumber: sig.blockNumber.toString(),
                                 timestamp: sig.timestamp.toString()
                             };
