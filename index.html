@@ -1,136 +1,152 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0" />
   <title>Declaration of the Daves - Sign the Contract</title>
 
   <!-- Allow embedding in iframes -->
-  <meta http-equiv="X-Frame-Options" content="ALLOWALL">
+  <meta http-equiv="X-Frame-Options" content="ALLOWALL" />
 
   <!-- Font -->
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * { margin:0; padding:0; box-sizing:border-box; }
     body {
-      background: #0d1117; color: #c9d1d9; font-family: 'JetBrains Mono', monospace;
-      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+      background:#0d1117; color:#c9d1d9; font-family:'JetBrains Mono', monospace;
+      min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
     }
-    .widget-container { max-width: 600px; margin: 0 auto; width: 100%; }
+    .widget-container { max-width:600px; margin:0 auto; width:100%; }
 
     /* Main contract container - square format */
     .contract-container {
-      background: #161b22; border: 1px solid #30363d; border-radius: 6px; width: 100%;
-      aspect-ratio: 1; overflow: hidden; display: flex; flex-direction: column;
+      background:#161b22; border:1px solid #30363d; border-radius:6px; width:100%;
+      aspect-ratio:1; overflow:hidden; display:flex; flex-direction:column;
     }
     .contract-header {
-      background: #0d1117; border-bottom: 1px solid #30363d; padding: 12px 20px;
-      display: flex; align-items: center; gap: 8px;
+      background:#0d1117; border-bottom:1px solid #30363d; padding:12px 20px;
+      display:flex; align-items:center; gap:8px;
     }
-    .file-icon { color: #7ee787; }
-    .filename { color: #f0f6fc; font-size: 14px; }
-    .network-badge { margin-left: auto; background: #1f6feb; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; }
+    .file-icon{ color:#7ee787; }
+    .filename{ color:#f0f6fc; font-size:14px; }
+    .network-badge{ margin-left:auto; background:#1f6feb; color:#fff; padding:4px 12px; border-radius:20px; font-size:12px; }
 
-    .code-editor { flex: 1; position: relative; display: flex; align-items: center; padding: 40px 0; }
-    .line-numbers {
-      position: absolute; left: 20px; top: 50%; transform: translateY(-50%);
-      width: 30px; text-align: right; color: #484f58; font-size: 12px; line-height: 20px; user-select: none;
+    .code-editor{ flex:1; position:relative; display:flex; align-items:center; padding:40px 0; }
+    .line-numbers{
+      position:absolute; left:20px; top:50%; transform:translateY(-50%);
+      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none;
     }
-    .code-content {
-      margin-left: 70px; margin-right: 40px; font-size: 12px; line-height: 20px; width: calc(100% - 110px);
-      /* mobile overflow guards */
-      overflow-wrap: anywhere; word-break: break-word;
+    .code-content{
+      margin-left:70px; margin-right:40px; font-size:12px; line-height:20px; width:calc(100% - 110px);
+      overflow-wrap:anywhere; word-break:break-word;
     }
 
     /* Syntax highlighting */
-    .comment { color: #8b949e; font-style: italic; }
-    .keyword { color: #ff7b72; }
-    .function-name { color: #d2a8ff; }
-    .type { color: #79c0ff; }
-    .string { color: #a5d6ff; }
-    .parameter { color: #ffa657; }
-    .address { color: #7ee787; font-size: 12px; word-break: break-word; font-family: 'JetBrains Mono', monospace; }
-    .number { color: #79c0ff; }
+    .comment{ color:#8b949e; font-style:italic; }
+    .keyword{ color:#ff7b72; }
+    .function-name{ color:#d2a8ff; }
+    .type{ color:#79c0ff; }
+    .string{ color:#a5d6ff; }
+    .parameter{ color:#ffa657; }
+    .address{ color:#7ee787; font-size:12px; word-break:break-word; font-family:'JetBrains Mono', monospace; }
+    .number{ color:#79c0ff; }
 
     /* Input styling */
-    .input-line { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 8px 12px; margin: 8px 0;
-      display: inline-flex; align-items: center; transition: border-color 0.2s; white-space: nowrap; }
-    .input-line:hover { border-color: #58a6ff; }
-    .input-line.focused { border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88,166,255,.1); }
-    .input-line.disabled { opacity: .5; cursor: not-allowed; }
-    .input-prefix, .input-suffix { color: #a5d6ff; font-size: 12px; }
-    .name-input { background: none; border: none; color: #a5d6ff; font-family: inherit; font-size: 12px; outline: none; width: 140px; margin: 0 4px; }
+    .input-line{
+      background:#0d1117; border:1px solid #30363d; border-radius:4px; padding:8px 12px; margin:8px 0;
+      display:inline-flex; align-items:center; transition:border-color .2s; white-space:nowrap;
+    }
+    .input-line:hover{ border-color:#58a6ff; }
+    .input-line.focused{ border-color:#58a6ff; box-shadow:0 0 0 3px rgba(88,166,255,.1); }
+    .input-line.disabled{ opacity:.5; cursor:not-allowed; }
+    .input-prefix,.input-suffix{ color:#a5d6ff; font-size:12px; }
+    .name-input{ background:none; border:none; color:#a5d6ff; font-family:inherit; font-size:12px; outline:none; width:140px; margin:0 4px; }
+
+    /* Mobile minimal input block */
+    .mobile-only{ display:none; }
+    .desktop-only{ display:inline-block; }
+
+    .mobile-shell{
+      background:#0d1117; border:1px solid #30363d; border-radius:6px; padding:12px 16px; margin:8px 0;
+      display:flex; align-items:center; gap:6px;
+    }
+    .quote{ color:#a5d6ff; }
+    .name-input-mobile{ background:none; border:none; color:#a5d6ff; font-family:inherit; font-size:14px; outline:none; width:100%; }
 
     /* Preview section */
-    .preview-comment { margin-top: 16px; padding: 8px; background: #0d1117; border-radius: 4px; font-size: 12px; }
-    .preview-comment .comment, .preview-comment .string { font-size: 12px; }
+    .preview-comment{ margin-top:16px; padding:8px; background:#0d1117; border-radius:4px; font-size:12px; }
+    .preview-comment .comment, .preview-comment .string{ font-size:12px; }
 
     /* Action section */
-    .action-section {
-      background: #0d1117; border-top: 1px solid #30363d; padding: 20px;
-      display: flex; align-items: center; justify-content: space-between;
+    .action-section{
+      background:#0d1117; border-top:1px solid #30363d; padding:20px;
+      display:flex; align-items:center; justify-content:space-between;
     }
-    .contract-info { font-size: 12px; }
-    .contract-label { color: #8b949e; margin-bottom: 4px; }
-    .contract-address-link { color: #7ee787; text-decoration: none; transition: opacity .2s; }
-    .contract-address-link:hover { opacity: .8; text-decoration: underline; }
-    .execute-button {
-      background: #f78166; color: #0d1117; border: none; padding: 10px 24px; border-radius: 6px;
-      font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s;
-      text-transform: uppercase; letter-spacing: .5px;
-    }
-    .execute-button:hover:not(:disabled){ background:#ff8c73; transform: translateY(-1px); }
-    .execute-button:active:not(:disabled){ transform: translateY(0); }
-    .execute-button:disabled{ opacity:.6; cursor:not-allowed; }
-
-    /* Connected status */
-    .wallet-status { position: absolute; top: 20px; right: 20px; font-size: 12px; color: #7ee787; display: none; align-items: center; gap: 6px; }
-    .wallet-status.connected { display: flex; }
-    .status-dot { width: 8px; height: 8px; background: #7ee787; border-radius: 50%; animation: pulse 2s infinite; }
-    @keyframes pulse { 0%{opacity:1} 50%{opacity:.5} 100%{opacity:1} }
-
-    /* Error state */
-    .error-message { background:#f85149; color:#fff; padding:8px 12px; border-radius:4px; font-size:12px; margin:8px 0; display:none; }
-    .error-message.show { display:block; }
-
-    /* NFT Preview - Square format */
-    .nft-container {
-      background:#161b22; border:1px solid #30363d; border-radius:6px; width:100%; aspect-ratio:1;
-      margin:40px auto 20px; display:none; align-items:center; justify-content:center;
-    }
-    .nft-container.show { display:flex; }
-    .nft-code-editor { position:relative; width:100%; padding:40px 0; }
-    .nft-line-numbers {
-      position:absolute; left:20px; top:50%; transform: translateY(-50%);
-      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none;
-    }
-    .nft-code-content { margin-left:70px; margin-right:40px; font-size:12px; line-height:20px; overflow-wrap:anywhere; word-break:break-word; }
-
-    /* Mint button */
-    .mint-button-container { text-align:center; margin-bottom:40px; display:none; }
-    .mint-button-container.show { display:block; }
-    .mint-button {
+    .contract-info{ font-size:12px; }
+    .contract-label{ color:#8b949e; margin-bottom:4px; }
+    .contract-address-link{ color:#7ee787; text-decoration:none; transition:opacity .2s; }
+    .contract-address-link:hover{ opacity:.8; text-decoration:underline; }
+    .execute-button{
       background:#f78166; color:#0d1117; border:none; padding:10px 24px; border-radius:6px;
       font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:all .2s;
       text-transform:uppercase; letter-spacing:.5px;
     }
-    .mint-button:hover:not(:disabled){ background:#ff8c73; transform: translateY(-1px); }
+    .execute-button:hover:not(:disabled){ background:#ff8c73; transform:translateY(-1px); }
+    .execute-button:active:not(:disabled){ transform:translateY(0); }
+    .execute-button:disabled{ opacity:.6; cursor:not-allowed; }
+
+    /* Connected status */
+    .wallet-status{ position:absolute; top:20px; right:20px; font-size:12px; color:#7ee787; display:none; align-items:center; gap:6px; }
+    .wallet-status.connected{ display:flex; }
+    .status-dot{ width:8px; height:8px; background:#7ee787; border-radius:50%; animation:pulse 2s infinite; }
+    @keyframes pulse{ 0%{opacity:1} 50%{opacity:.5} 100%{opacity:1} }
+
+    /* Error state */
+    .error-message{ background:#f85149; color:#fff; padding:8px 12px; border-radius:4px; font-size:12px; margin:8px 0; display:none; }
+    .error-message.show{ display:block; }
+
+    /* NFT Preview - Square format */
+    .nft-container{
+      background:#161b22; border:1px solid #30363d; border-radius:6px; width:100%;
+      aspect-ratio:1; margin:40px auto 20px; display:none; align-items:center; justify-content:center;
+    }
+    .nft-container.show{ display:flex; }
+    .nft-code-editor{ position:relative; width:100%; padding:40px 0; }
+    .nft-line-numbers{
+      position:absolute; left:20px; top:50%; transform:translateY(-50%);
+      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none;
+    }
+    .nft-code-content{ margin-left:70px; margin-right:40px; font-size:12px; line-height:20px; overflow-wrap:anywhere; word-break:break-word; }
+
+    /* Mint button */
+    .mint-button-container{ text-align:center; margin-bottom:40px; display:none; }
+    .mint-button-container.show{ display:block; }
+    .mint-button{
+      background:#f78166; color:#0d1117; border:none; padding:10px 24px; border-radius:6px;
+      font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:all .2s;
+      text-transform:uppercase; letter-spacing:.5px;
+    }
+    .mint-button:hover:not(:disabled){ background:#ff8c73; transform:translateY(-1px); }
     .mint-button:disabled{ opacity:.6; cursor:not-allowed; }
-    .loading-spinner { display:inline-block; width:14px; height:14px; border:2px solid #0d1117; border-radius:50%; border-top-color:transparent; animation: spin .8s linear infinite; margin-left:8px; vertical-align:middle; }
-    @keyframes spin { to{ transform: rotate(360deg); } }
+    .loading-spinner{ display:inline-block; width:14px; height:14px; border:2px solid #0d1117; border-radius:50%; border-top-color:transparent; animation:spin .8s linear infinite; margin-left:8px; vertical-align:middle; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
 
     /* Success message */
-    .success-message { background:#238636; color:#fff; padding:12px; border-radius:6px; font-size:12px; margin:20px 0; text-align:center; display:none; }
-    .success-message.show { display:block; }
-    .success-message a { color:#7ee787; text-decoration:none; }
-    .success-message a:hover { text-decoration:underline; }
+    .success-message{ background:#238636; color:#fff; padding:12px; border-radius:6px; font-size:12px; margin:20px 0; text-align:center; display:none; }
+    .success-message.show{ display:block; }
+    .success-message a{ color:#7ee787; text-decoration:none; }
+    .success-message a:hover{ text-decoration:underline; }
 
-    @media (max-width: 600px) {
-      .contract-container { border-radius: 0; }
-      .code-content { font-size: 11px; }
-      .name-input { font-size: 11px; width: 120px; }
-      .execute-button { font-size: 12px; padding: 8px 20px; }
+    @media (max-width: 600px){
+      /* show minimal input, hide desktop syntax line only */
+      .desktop-only{ display:none; }
+      .mobile-only{ display:block; }
+      .code-content{ font-size:11px; }
+      .name-input{ font-size:11px; width:120px; }
+      .execute-button{ font-size:12px; padding:8px 20px; }
     }
   </style>
 </head>
@@ -168,7 +184,9 @@
           <div class="comment"> */</div>
           <br>
           <div><span class="keyword">function</span> <span class="function-name">cosignDeclaration</span>(<span class="type">string</span> <span class="type">memory</span> <span class="parameter">chosenName</span>) <span class="keyword">public</span> {</div>
-          <div style="margin-left: 20px;">
+
+          <!-- DESKTOP syntax line (unchanged) -->
+          <div class="desktop-only" style="margin-left:20px;">
             <div class="comment">// Enter your chosen name (lowercase, max 14 chars)</div>
             <div class="input-line" id="inputLine" onclick="focusInput()">
               <span class="input-prefix">require(chosenName == "</span>
@@ -180,6 +198,21 @@
               <span class="string" id="preview">i_am_your_name_dave</span>
             </div>
           </div>
+
+          <!-- MOBILE minimal syntax line -->
+          <div class="mobile-only" style="margin-left:20px;">
+            <div class="comment">// Enter your chosen name (lowercase, max 14 chars)</div>
+            <div class="mobile-shell" id="inputLineMobile" onclick="focusInput()">
+              <span class="quote">"</span>
+              <input type="text" class="name-input-mobile" id="nameInputMobile" placeholder="your_name" maxlength="14" autocomplete="off" spellcheck="false">
+              <span class="quote">"</span>
+            </div>
+            <div class="preview-comment">
+              <span class="comment">// Your signature will be: </span>
+              <span class="string" id="previewMobile">i_am_your_name_dave</span>
+            </div>
+          </div>
+
           <div>}</div>
 
           <div class="error-message" id="errorMsg">
@@ -219,17 +252,25 @@
     <!-- Success Message -->
     <div class="success-message" id="successMessage">
       <div id="successText">NFT Minted Successfully!</div>
-      <div style="margin-top: 8px;">
+      <div style="margin-top:8px;">
         <a id="openSeaLink" href="#" target="_blank" rel="noopener noreferrer">View on OpenSea →</a>
       </div>
     </div>
   </div>
 
-  <!-- ethers v5 -->
+  <!-- ethers v5 loader -->
   <script>
-    function loadEthers(callback){
-      const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js';
-      s.onload=callback; s.onerror=function(){ const a=document.createElement('script'); a.src='https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js'; a.onload=callback; a.onerror=function(){showError('Failed to load Web3 library. Please refresh.')} ; document.head.appendChild(a); };
+    function loadEthers(cb){
+      const s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js';
+      s.onload=cb;
+      s.onerror=function(){
+        const a=document.createElement('script');
+        a.src='https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js';
+        a.onload=cb;
+        a.onerror=function(){ showError('Failed to load Web3 library. Please refresh.'); };
+        document.head.appendChild(a);
+      };
       document.head.appendChild(s);
     }
   </script>
@@ -238,7 +279,7 @@
     loadEthers(function () {
       // --- Constants ---
       const CONTRACT_ADDRESS = '0xB0731E7ea189c169640Fd890E5dcE9811040D0eA';
-      const NFT_CONTRACT_ADDRESS = ''; // keep empty until deployed
+      const NFT_CONTRACT_ADDRESS = ''; // fill when deployed
       const BASE_CHAIN_ID = '0x2105'; // 8453 hex
       const BASE_CHAIN_ID_DEC = 8453;
 
@@ -261,17 +302,21 @@
       // --- State ---
       let provider=null, signer=null, contract=null, nftContract=null;
       let connected=false, userAddress=null;
-      let signatureData=null; // {daveName, signatureNumber, blockNumber, txHash}
+      let signatureData=null;
 
-      // --- Elements ---
+      // --- Elements (desktop + mobile) ---
       const executeButton = document.getElementById('executeButton');
-      const nameInput = document.getElementById('nameInput');
+      const nameInputDesktop = document.getElementById('nameInput');
+      const nameInputMobile  = document.getElementById('nameInputMobile');
+      const previewDesktop   = document.getElementById('preview');
+      const previewMobile    = document.getElementById('previewMobile');
+      const inputLineDesktop = document.getElementById('inputLine');
+      const inputLineMobile  = document.getElementById('inputLineMobile');
+
       const errorMsg = document.getElementById('errorMsg');
       const errorText = document.getElementById('errorText');
       const walletStatus = document.getElementById('walletStatus');
       const walletAddress = document.getElementById('walletAddress');
-      const preview = document.getElementById('preview');
-      const inputLine = document.getElementById('inputLine');
       const nftPreview = document.getElementById('nftPreview');
       const nftContent = document.getElementById('nftContent');
       const mintButtonContainer = document.getElementById('mintButtonContainer');
@@ -280,19 +325,40 @@
       const successText = document.getElementById('successText');
       const openSeaLink = document.getElementById('openSeaLink');
 
-      // helpers
-      window.focusInput = function(){ if(!nameInput.disabled){ nameInput.focus(); } };
+      // utilities
+      const isMobile = () => window.matchMedia('(max-width: 600px)').matches;
+      const activeInput = () => isMobile() ? nameInputMobile : nameInputDesktop;
+      const activeLine  = () => isMobile() ? inputLineMobile : inputLineDesktop;
+
+      window.focusInput = function(){ const el = activeInput(); if (el && !el.disabled) el.focus(); };
+
       function showError(m){ errorText.textContent=m; errorMsg.classList.add('show'); setTimeout(()=>errorMsg.classList.remove('show'),7000); }
       function clearMessages(){ errorMsg.classList.remove('show'); }
 
-      nameInput.addEventListener('focus',()=>inputLine.classList.add('focused'));
-      nameInput.addEventListener('blur',()=>inputLine.classList.remove('focused'));
-      nameInput.addEventListener('input',(e)=>{ const v=e.target.value.toLowerCase(); e.target.value=v; preview.textContent = v ? `i_am_${v}_dave` : 'i_am_your_name_dave'; errorMsg.classList.remove('show'); });
-
-      function extractDisplayName(full){ // i_am_xxx_dave -> xxx
-        if (!full) return '';
-        return full.replace(/^i_am_/,'').replace(/_dave$/,'');
+      function syncPreview(val){
+        if (previewDesktop) previewDesktop.textContent = val ? `i_am_${val}_dave` : 'i_am_your_name_dave';
+        if (previewMobile)  previewMobile.textContent  = val ? `i_am_${val}_dave` : 'i_am_your_name_dave';
       }
+
+      function handleInput(e){
+        const v = e.target.value.toLowerCase();
+        e.target.value = v;
+        syncPreview(v);
+        errorMsg.classList.remove('show');
+      }
+
+      if (nameInputDesktop){
+        nameInputDesktop.addEventListener('focus',()=>inputLineDesktop.classList.add('focused'));
+        nameInputDesktop.addEventListener('blur', ()=>inputLineDesktop.classList.remove('focused'));
+        nameInputDesktop.addEventListener('input', handleInput);
+      }
+      if (nameInputMobile){
+        nameInputMobile.addEventListener('focus',()=>inputLineMobile.classList.add('focused'));
+        nameInputMobile.addEventListener('blur', ()=>inputLineMobile.classList.remove('focused'));
+        nameInputMobile.addEventListener('input', handleInput);
+      }
+
+      function extractDisplayName(full){ return full ? full.replace(/^i_am_/,'').replace(/_dave$/,'') : ''; }
 
       function generateNFTPreview(daveName, signatureNumber, blockNumber, txHash, signerAddr){
         const shortName = extractDisplayName(daveName);
@@ -315,47 +381,43 @@
       }
 
       async function ensureBase(eth){
-        try {
-          const id = await eth.request({ method:'eth_chainId' });
-          if (id !== BASE_CHAIN_ID){
-            try {
-              await eth.request({ method:'wallet_switchEthereumChain', params:[{ chainId: BASE_CHAIN_ID }] });
-            } catch (e){
-              if (e && e.code === 4902){
-                await eth.request({ method:'wallet_addEthereumChain', params:[{
-                  chainId: BASE_CHAIN_ID, chainName:'Base',
-                  nativeCurrency:{ name:'Ether', symbol:'ETH', decimals:18 },
-                  rpcUrls:['https://mainnet.base.org'], blockExplorerUrls:['https://basescan.org/']
-                }]});
-              } else { throw e; }
-            }
+        const id = await eth.request({ method:'eth_chainId' });
+        if (id !== BASE_CHAIN_ID){
+          try {
+            await eth.request({ method:'wallet_switchEthereumChain', params:[{ chainId: BASE_CHAIN_ID }] });
+          } catch (e){
+            if (e && e.code === 4902){
+              await eth.request({ method:'wallet_addEthereumChain', params:[{
+                chainId: BASE_CHAIN_ID, chainName:'Base',
+                nativeCurrency:{ name:'Ether', symbol:'ETH', decimals:18 },
+                rpcUrls:['https://mainnet.base.org'], blockExplorerUrls:['https://basescan.org/']
+              }]});
+            } else { throw e; }
           }
-        } catch (e){ throw e; }
+        }
       }
 
-      // New: fetch signer details via event logs (scales) instead of looping signatures[]
+      // scalable: pull user’s own DeclarationSigned event
       async function fetchSignatureData(addr){
-        // Start from inscriptionBlock to avoid scanning chain history
-        const [ , inscriptionBlock ] = await (new ethers.Contract(CONTRACT_ADDRESS, ["function getInscriptionDetails() view returns (address,uint256,uint256)"], provider)).getInscriptionDetails();
+        const providerRO = provider; // same provider
+        const helper = new ethers.Contract(CONTRACT_ADDRESS, ["function getInscriptionDetails() view returns (address,uint256,uint256)","function signatureByAddress(address) view returns (string)"], providerRO);
+        const details = await helper.getInscriptionDetails();
+        const startBlock = details[1].toNumber ? details[1].toNumber() : details[1];
 
         const iface = new ethers.utils.Interface(CONTRACT_ABI);
         const topic0 = iface.getEventTopic("DeclarationSigned(address,string,uint256,uint256)");
-        const topicAddr = ethers.utils.hexZeroPad(addr, 32); // indexed signatory
+        const topicAddr = ethers.utils.hexZeroPad(addr, 32);
 
-        const logs = await provider.getLogs({
-          address: CONTRACT_ADDRESS,
-          fromBlock: inscriptionBlock.toNumber ? inscriptionBlock.toNumber() : inscriptionBlock, // ethers v5 BigNumber
-          toBlock: 'latest',
+        const logs = await providerRO.getLogs({
+          address: CONTRACT_ADDRESS, fromBlock: startBlock, toBlock: 'latest',
           topics: [topic0, topicAddr]
         });
-
         if (!logs.length) return null;
-
-        // Use the first (original) signature event for the address
         const log = logs[0];
         const parsed = iface.parseLog(log);
+        const name = await helper.signatureByAddress(addr);
         return {
-          daveName: await (new ethers.Contract(CONTRACT_ADDRESS, ["function signatureByAddress(address) view returns (string)"], provider)).signatureByAddress(addr),
+          daveName: name,
           signatureNumber: parsed.args.signatureNumber.toString(),
           blockNumber: log.blockNumber,
           txHash: log.transactionHash
@@ -369,7 +431,7 @@
         executeButton.disabled = true; executeButton.innerHTML = 'CONNECTING...';
         try {
           await ensureBase(window.ethereum);
-          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          const accounts = await window.ethereum.request({ method:'eth_requestAccounts' });
           if (!accounts || !accounts.length) throw new Error('No accounts');
 
           provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -377,9 +439,8 @@
           if (net.chainId !== BASE_CHAIN_ID_DEC) throw new Error('Wrong network');
 
           signer = provider.getSigner();
-          userAddress = (await signer.getAddress());
+          userAddress = await signer.getAddress();
           contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
           if (NFT_CONTRACT_ADDRESS){ nftContract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_CONTRACT_ABI, signer); }
 
           walletAddress.textContent = `Connected: ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`;
@@ -387,20 +448,23 @@
 
           const signed = await contract.hasSigned(userAddress);
           if (signed){
-            // Scalable path: event log lookup for sig number + block + tx
             signatureData = await fetchSignatureData(userAddress);
-            if (!signatureData) { showError('Could not retrieve signature data'); }
-            else {
-              const previewHtml = generateNFTPreview(signatureData.daveName, signatureData.signatureNumber, signatureData.blockNumber, signatureData.txHash, userAddress);
-              nftContent.innerHTML = previewHtml;
-              nftPreview.classList.add('show');
-              mintButtonContainer.classList.add('show'); // visible but disabled until NFT addr set
+            if (signatureData){
+              nftContent.innerHTML = generateNFTPreview(signatureData.daveName, signatureData.signatureNumber, signatureData.blockNumber, signatureData.txHash, userAddress);
+              nftPreview.classList.add('show'); mintButtonContainer.classList.add('show');
+            } else {
+              showError('Could not retrieve signature data');
             }
-            nameInput.disabled = true; inputLine.classList.add('disabled');
+            // lock inputs
+            if (nameInputDesktop) nameInputDesktop.disabled = true;
+            if (nameInputMobile)  nameInputMobile.disabled  = true;
+            if (inputLineDesktop) inputLineDesktop.classList.add('disabled');
+            if (inputLineMobile)  inputLineMobile.classList.add('disabled');
             document.querySelector('.preview-comment .comment').textContent = '// ';
-            preview.textContent = 'THE BANKSY STAYS ON THE WALL';
+            (previewDesktop||{}).textContent = 'THE BANKSY STAYS ON THE WALL';
+            (previewMobile ||{}).textContent = 'THE BANKSY STAYS ON THE WALL';
             executeButton.innerHTML = 'ALREADY SIGNED'; executeButton.disabled = true;
-            connected = true; // still connected, just not signing
+            connected = true;
           } else {
             connected = true;
             executeButton.innerHTML = 'EXECUTE TRANSACTION';
@@ -416,7 +480,9 @@
       async function signDeclaration(){
         try {
           clearMessages();
-          const name = nameInput.value.trim().toLowerCase();
+          const active = activeInput();
+          const name = (active ? active.value : '').trim().toLowerCase();
+
           if (!name){ showError('Please enter a name'); return; }
           if (name.length > 14){ showError('Name cannot exceed 14 characters'); return; }
           if (!/^[a-z0-9-]+$/.test(name)){ showError('Only lowercase letters, numbers, and hyphens allowed'); return; }
@@ -430,28 +496,25 @@
           executeButton.innerHTML = 'CONFIRMING<span class="loading-spinner"></span>';
           const receipt = await tx.wait();
 
-          // Read event data directly (no loops)
+          // Read event for sig #
           const iface = new ethers.utils.Interface(CONTRACT_ABI);
-          const ev = receipt.logs.map(l=>{ try { return iface.parseLog(l) } catch { return null } }).find(x=>x && x.name==='DeclarationSigned');
+          const ev = receipt.logs.map(l=>{ try{ return iface.parseLog(l) }catch{return null} }).find(x=>x && x.name==='DeclarationSigned');
           const sigNum = ev ? ev.args.signatureNumber.toString() : 'N/A';
 
-          signatureData = {
-            daveName: fullName,
-            signatureNumber: sigNum,
-            blockNumber: receipt.blockNumber,
-            txHash: tx.hash
-          };
+          signatureData = { daveName: fullName, signatureNumber: sigNum, blockNumber: receipt.blockNumber, txHash: tx.hash };
 
-          // Lock UI and show preview
-          nameInput.value=''; nameInput.disabled=true; inputLine.classList.add('disabled');
-          document.querySelector('.preview-comment .comment').textContent = '// ';
-          preview.textContent = 'THE BANKSY STAYS ON THE WALL';
+          // lock inputs
+          if (nameInputDesktop) nameInputDesktop.value='', nameInputDesktop.disabled = true;
+          if (nameInputMobile)  nameInputMobile.value='',  nameInputMobile.disabled  = true;
+          if (inputLineDesktop) inputLineDesktop.classList.add('disabled');
+          if (inputLineMobile)  inputLineMobile.classList.add('disabled');
+          document.querySelectorAll('.preview-comment .comment').forEach(el=>el.textContent='// ');
+          syncPreview('THE BANKSY STAYS ON THE WALL');
           executeButton.innerHTML = 'SIGNED'; executeButton.disabled = true;
 
           nftContent.innerHTML = generateNFTPreview(fullName, sigNum, receipt.blockNumber, tx.hash, userAddress);
           nftPreview.classList.add('show'); mintButtonContainer.classList.add('show');
 
-          // notify parent iframe for resize
           setTimeout(()=>{ if (window.parent !== window){ window.parent.postMessage({ type:'resize', height: document.body.scrollHeight }, '*'); } }, 100);
         } catch (error){
           console.error(error);
@@ -462,23 +525,24 @@
         }
       }
 
-      async function mintNFT(){
-        showError('NFT contract not deployed yet'); // placeholder by request
-      }
+      function mintNFT(){ showError('NFT contract not deployed yet'); } // placeholder
 
-      // Wire up buttons
       executeButton.addEventListener('click', async ()=>{ if (!connected) await connectWallet(); else await signDeclaration(); });
       mintButton.addEventListener('click', mintNFT);
-      nameInput.addEventListener('keypress', async (e)=>{ if (e.key==='Enter' && connected && !nameInput.disabled){ await signDeclaration(); } });
 
-      // Chain/account listeners
+      // Enter-to-sign for both inputs
+      [nameInputDesktop, nameInputMobile].forEach(inp=>{
+        if (!inp) return;
+        inp.addEventListener('keypress', async (e)=>{ if (e.key==='Enter' && connected && !inp.disabled){ await signDeclaration(); } });
+      });
+
       if (window.ethereum){
-        window.ethereum.on('accountsChanged', (accounts)=>{ if (!accounts.length) location.reload(); else if (connected && accounts[0].toLowerCase() !== userAddress?.toLowerCase()) location.reload(); });
+        window.ethereum.on('accountsChanged', (accounts)=>{ if (!accounts.length) location.reload(); else if (connected && accounts[0].toLowerCase() !== (userAddress||'').toLowerCase()) location.reload(); });
         window.ethereum.on('chainChanged', (id)=>{ if (id !== BASE_CHAIN_ID){ showError('Please switch back to Base network'); executeButton.innerHTML='CONNECT WALLET'; executeButton.disabled=false; connected=false; } });
       }
 
-      // Autofocus input
-      nameInput.focus();
+      // autofocus whichever is visible
+      const initial = activeInput(); if (initial) initial.focus();
     });
   </script>
 </body>
