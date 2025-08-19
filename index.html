@@ -8,49 +8,58 @@
   <!-- Allow embedding in iframes -->
   <meta http-equiv="X-Frame-Options" content="ALLOWALL" />
 
-  <!-- Perf for ESM CDN -->
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
+  <!-- Perf hints for CDN -->
+  <link rel="preconnect" href="https://unpkg.com" crossorigin />
+  <link rel="dns-prefetch" href="https://unpkg.com" />
 
   <!-- Font -->
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 
-  <!-- Reown/AppKit (ESM over CDN) — no top-level await; long readiness window; resilient provider polling -->
+  <!-- Reown/AppKit (ESM via unpkg ?module). No top-level await. Expose daveModal + readiness flag. -->
   <script type="module">
+    // Readiness flags for non-module script
     window.__appkitReady = false;
+    window.__appkitError = '';
+
     (async () => {
       try {
-        // Load modules (single source). Using +esm keeps the tree small and consistent across WebKit.
-        const appkitMod   = await import("https://cdn.jsdelivr.net/npm/@reown/appkit/+esm");
-        const networksMod = await import("https://cdn.jsdelivr.net/npm/@reown/appkit/networks/+esm");
-        const adapterMod  = await import("https://cdn.jsdelivr.net/npm/@reown/appkit-adapter-ethers5/+esm");
+        // Pin major versions; avoid +esm wrapper quirks
+        const appkit   = await import('https://unpkg.com/@reown/appkit@1/dist/index.js?module');
+        const adapter  = await import('https://unpkg.com/@reown/appkit-adapter-ethers5@1/dist/index.js?module');
 
-        const { createAppKit } = appkitMod;
-        const { base } = networksMod;
-        const { Ethers5Adapter } = adapterMod;
+        const { createAppKit } = appkit;
+        const { Ethers5Adapter } = adapter;
+
+        // Define Base chain inline to avoid the networks subpackage import
+        const base = {
+          id: 8453,
+          name: 'Base',
+          rpcUrls: { default: { http: ['https://mainnet.base.org'] } },
+          blockExplorers: { default: { name: 'Basescan', url: 'https://basescan.org' } },
+          nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }
+        };
 
         const modal = await createAppKit({
           adapters: [new Ethers5Adapter()],
           networks: [base],
           defaultNetwork: base,
-          projectId: "c6e735ab923e4817edde143987bdfccf",
-          themeMode: "dark",
+          projectId: 'c6e735ab923e4817edde143987bdfccf',
+          themeMode: 'dark',
           features: { analytics: false },
           metadata: {
-            name: "Declaration of the Daves",
-            description: "Sign the declaration on Base",
-            url: "https://connect.thebanksy.house",
-            icons: ["https://connect.thebanksy.house/icon.png"]
+            name: 'Declaration of the Daves',
+            description: 'Sign the declaration on Base',
+            url: 'https://connect.thebanksy.house',
+            icons: ['https://connect.thebanksy.house/icon.png']
           }
         });
 
-        // Expose a minimal modal API globally for non-module script
         window.daveModal = modal;
         window.__appkitReady = true;
       } catch (e) {
-        console.error("AppKit init failed", e);
+        console.error('AppKit init failed', e);
+        window.__appkitError = (e && (e.message || String(e))) || 'unknown';
         window.__appkitReady = false;
-        window.__appkitError = (e && (e.message || e.toString())) || "unknown";
       }
     })();
   </script>
@@ -128,7 +137,6 @@
     }
     .quote{ color:#a5d6ff; }
     .name-input-mobile{ background:none; border:none; color:#a5d6ff; font-family:inherit; font-size:14px; outline:none; width:100%; }
-    /* Flashing cursor for mobile minimal input */
     .mobile-caret{
       width:6px; height:1.1em; background:#a5d6ff; display:inline-block; border-radius:1px;
       animation:blink 1s steps(1,end) infinite;
@@ -205,7 +213,12 @@
     @media (max-width: 600px) {
       body { padding-top: calc(20px + env(safe-area-inset-top)); }
 
-      .contract-container { aspect-ratio:auto; height:auto; overflow:visible; border-radius:0; }
+      .contract-container {
+        aspect-ratio: auto;
+        height: auto;
+        overflow: visible;
+        border-radius: 0;
+      }
 
       .code-editor { align-items:flex-start; padding:24px 0 16px; }
       .line-numbers { top:24px; transform:none; }
@@ -481,34 +494,29 @@
         }
       }
 
-      // Wait for AppKit readiness (long window for iOS WebKit)
+      // Wait for AppKit readiness (extended for iOS)
       async function waitForAppKitReady(timeoutMs=12000){
         const start = Date.now();
         while (!window.__appkitReady && (Date.now() - start) < timeoutMs){
           await new Promise(r=>setTimeout(r,150));
         }
         if (!window.__appkitReady){
-          const msg = window.__appkitError ? `AppKit init error: ${window.__appkitError}` : `Wallet chooser unavailable after ${Math.round(timeoutMs/1000)}s`;
+          const msg = window.__appkitError ? `AppKit init error: ${window.__appkitError}` : 'Wallet chooser unavailable.';
           throw new Error(msg);
         }
       }
 
-      // After opening the modal, poll for a usable provider (WalletConnect or injected)
+      // After opening the modal, poll for an EIP-1193 provider
       async function waitForProviderFromAppKit(timeoutMs=15000){
         const start = Date.now();
         while ((Date.now() - start) < timeoutMs){
-          // Preferred: AppKit getter
           if (window.daveModal?.getWalletProvider){
             try {
               const wc = await window.daveModal.getWalletProvider();
               if (wc) return wc;
-            } catch (_) {}
+            } catch(_) {}
           }
-          // Fallback: global ethereum (some wallets expose WC as window.ethereum)
-          if (window.ethereum){
-            return window.ethereum;
-          }
-          // Some providers put multiple entries in ethereum.providers
+          if (window.ethereum) return window.ethereum;
           if (window.ethereum?.providers?.length){
             const wc = window.ethereum.providers.find(p => p && typeof p.request === 'function');
             if (wc) return wc;
@@ -549,7 +557,7 @@
         };
       }
 
-      // --- Hybrid connect: injected first; fall back to AppKit deep-link on mobile (no QR on desktop) ---
+      // Hybrid connect flow
       async function connectWallet(){
         clearMessages();
         executeButton.disabled = true;
@@ -558,32 +566,21 @@
         try {
           const hasInjected = typeof window.ethereum !== 'undefined';
           if (hasInjected) {
-            // Injected path (desktop extensions, in-app browsers)
             await ensureBase(window.ethereum);
             const accounts = await window.ethereum.request({ method:'eth_requestAccounts' });
             if (!accounts || !accounts.length) throw new Error('No accounts');
             provider = new ethers.providers.Web3Provider(window.ethereum);
           } else {
-            // No injected provider — use AppKit mobile deep-link
-            if (!isMobileUA()){
-              throw new Error('No browser wallet detected. Install a wallet and reload.');
-            }
+            if (!isMobileUA()) throw new Error('No browser wallet detected. Install a wallet and reload.');
             await waitForAppKitReady(12000);
             if (!window.daveModal || typeof window.daveModal.open !== 'function') {
               throw new Error('Wallet chooser unavailable (modal missing).');
             }
-
-            // Open wallet list; on mobile this deep-links to the selected wallet
             await window.daveModal.open();
-
-            // Keep waiting for the provider to appear while the user completes the handoff
             const wcProvider = await waitForProviderFromAppKit(15000);
             if (!wcProvider) throw new Error('No wallet selected or session not established.');
-
-            // Ensure Base, then wrap with ethers
             await ensureBase(wcProvider);
-            // Request accounts explicitly in case the wallet requires it post-session
-            try { await wcProvider.request({ method:"eth_requestAccounts" }); } catch(_) {}
+            try { await wcProvider.request({ method:'eth_requestAccounts' }); } catch(_) {}
             provider = new ethers.providers.Web3Provider(wcProvider, 'any');
           }
 
@@ -605,11 +602,10 @@
               signatureData = sd;
               nftContent.innerHTML = generateNFTPreview(sd.daveName, sd.signatureNumber, sd.blockNumber, sd.txHash, userAddress);
               nftPreview.classList.add('show');
-              mintButtonContainer.classList.add('show'); // still disabled until NFT deployed
+              mintButtonContainer.classList.add('show');
             } else {
               showError('Could not retrieve signature data');
             }
-            // lock inputs
             if (nameInputDesktop) nameInputDesktop.disabled = true;
             if (nameInputMobile)  nameInputMobile.disabled  = true;
             if (inputLineDesktop) inputLineDesktop.classList.add('disabled');
@@ -655,7 +651,6 @@
 
           signatureData = { daveName: fullName, signatureNumber: sigNum, blockNumber: receipt.blockNumber, txHash: tx.hash };
 
-          // lock inputs
           if (nameInputDesktop) nameInputDesktop.value='', nameInputDesktop.disabled = true;
           if (nameInputMobile)  nameInputMobile.value='',  nameInputMobile.disabled  = true;
           if (inputLineDesktop) inputLineDesktop.classList.add('disabled');
@@ -667,7 +662,7 @@
 
           nftContent.innerHTML = generateNFTPreview(fullName, sigNum, receipt.blockNumber, tx.hash, userAddress);
           nftPreview.classList.add('show');
-          mintButtonContainer.classList.add('show'); // still disabled
+          mintButtonContainer.classList.add('show');
 
           setTimeout(()=>{ if (window.parent !== window){ window.parent.postMessage({ type:'resize', height: document.body.scrollHeight }, '*'); } }, 100);
         } catch (error){
