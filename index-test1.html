@@ -33,7 +33,6 @@
             width: 100%;
         }
         
-        /* Main contract container - square format */
         .contract-container {
             background: #161b22;
             border: 1px solid #30363d;
@@ -54,30 +53,17 @@
             gap: 8px;
         }
         
-        .file-icon {
-            color: #7ee787;
-        }
-        
-        .filename {
-            color: #f0f6fc;
-            font-size: 14px;
-        }
-        
-        .network-badge {
-            margin-left: auto;
-            background: #1f6feb;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-        }
+        .file-icon { color: #7ee787; }
+        .filename { color: #f0f6fc; font-size: 14px; }
+        .network-badge { margin-left: auto; background: #1f6feb; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; }
         
         .code-editor {
-            flex: 1;
+            flex-grow: 1;
             position: relative;
             display: flex;
             align-items: center;
             padding: 40px 0;
+            overflow-y: auto;
         }
         
         .line-numbers {
@@ -101,44 +87,15 @@
             width: calc(100% - 110px);
         }
         
-        /* Syntax highlighting */
-        .comment {
-            color: #8b949e;
-            font-style: italic;
-        }
+        .comment { color: #8b949e; font-style: italic; }
+        .keyword { color: #ff7b72; }
+        .function-name { color: #d2a8ff; }
+        .type { color: #79c0ff; }
+        .string { color: #a5d6ff; }
+        .parameter { color: #ffa657; }
+        .address { color: #7ee787; font-size: 12px; word-break: break-all; font-family: 'JetBrains Mono', monospace; }
+        .number { color: #79c0ff; }
         
-        .keyword {
-            color: #ff7b72;
-        }
-        
-        .function-name {
-            color: #d2a8ff;
-        }
-        
-        .type {
-            color: #79c0ff;
-        }
-        
-        .string {
-            color: #a5d6ff;
-        }
-        
-        .parameter {
-            color: #ffa657;
-        }
-        
-        .address {
-            color: #7ee787;
-            font-size: 12px;
-            word-break: break-all;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        
-        .number {
-            color: #79c0ff;
-        }
-        
-        /* Input styling */
         .input-line {
             background: #0d1117;
             border: 1px solid #30363d;
@@ -150,26 +107,16 @@
             transition: border-color 0.2s;
             white-space: nowrap;
         }
+        .input-line:hover { border-color: #58a6ff; }
+        .input-line.focused { border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1); }
+        .input-line.disabled { opacity: 0.5; cursor: not-allowed; }
+        .input-prefix, .input-suffix { color: #a5d6ff; font-size: 12px; }
         
-        .input-line:hover {
-            border-color: #58a6ff;
+        @keyframes blink-cursor {
+            from, to { border-color: transparent; }
+            50% { border-color: #a5d6ff; }
         }
-        
-        .input-line.focused {
-            border-color: #58a6ff;
-            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
-        }
-        
-        .input-line.disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .input-prefix, .input-suffix {
-            color: #a5d6ff;
-            font-size: 12px;
-        }
-        
+
         .name-input {
             background: none;
             border: none;
@@ -177,294 +124,81 @@
             font-family: inherit;
             font-size: 12px;
             outline: none;
-            width: 140px;
             margin: 0 4px;
+            width: 30ch; 
+            max-width: 30ch;
+            border-left: 2px solid #a5d6ff;
+            animation: blink-cursor 1s step-end infinite;
+            padding-left: 2px;
         }
-        
-        /* Preview section */
-        .preview-comment {
-            margin-top: 16px;
-            padding: 8px;
-            background: #0d1117;
-            border-radius: 4px;
-            font-size: 12px;
+
+        .name-input:focus {
+            animation: none;
+            border-left-color: transparent;
         }
+
+        .preview-comment { margin-top: 16px; padding: 8px; background: #0d1117; border-radius: 4px; font-size: 12px; }
+        .preview-comment .comment, .preview-comment .string { font-size: 12px; }
         
-        .preview-comment .comment {
-            font-size: 12px;
-        }
+        .action-section { background: #0d1117; border-top: 1px solid #30363d; padding: 20px; display: flex; align-items: center; justify-content: space-between; }
+        .contract-info { font-size: 12px; }
+        .contract-label { color: #8b949e; margin-bottom: 4px; }
+        .contract-address-link { color: #7ee787; text-decoration: none; transition: opacity 0.2s; }
+        .contract-address-link:hover { opacity: 0.8; text-decoration: underline; }
         
-        .preview-comment .string {
-            font-size: 12px;
-        }
+        .execute-button { background: #f78166; color: #0d1117; border: none; padding: 10px 24px; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
+        .execute-button:hover:not(:disabled) { background: #ff8c73; transform: translateY(-1px); }
+        .execute-button:active:not(:disabled) { transform: translateY(0); }
+        .execute-button:disabled { opacity: 0.6; cursor: not-allowed; }
         
-        /* Action section */
-        .action-section {
-            background: #0d1117;
-            border-top: 1px solid #30363d;
-            padding: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
+        .wallet-status { position: absolute; top: 20px; right: 20px; font-size: 12px; color: #7ee787; display: none; align-items: center; gap: 6px; }
+        .wallet-status.connected { display: flex; }
+        .status-dot { width: 8px; height: 8px; background: #7ee787; border-radius: 50%; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
         
-        .contract-info {
-            font-size: 12px;
-        }
+        .error-message { background: #f85149; color: white; padding: 8px 12px; border-radius: 4px; font-size: 12px; margin: 8px 0; display: none; }
+        .error-message.show { display: block; }
         
-        .contract-label {
-            color: #8b949e;
-            margin-bottom: 4px;
-        }
+        .nft-container { background: #161b22; border: 1px solid #30363d; border-radius: 6px; width: 100%; aspect-ratio: 1; margin: 40px auto 20px; display: none; align-items: center; justify-content: center; }
+        .nft-container.show { display: flex; }
+        .nft-code-editor { position: relative; width: 100%; padding: 40px 0; }
+        .nft-line-numbers { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); width: 30px; text-align: right; color: #484f58; font-size: 12px; line-height: 20px; user-select: none; }
+        .nft-code-content { margin-left: 70px; margin-right: 40px; font-size: 12px; line-height: 20px; }
         
-        .contract-address-link {
-            color: #7ee787;
-            text-decoration: none;
-            transition: opacity 0.2s;
-        }
+        .mint-button-container { text-align: center; margin-bottom: 40px; display: none; }
+        .mint-button-container.show { display: block; }
+        .mint-button { background: #f78166; color: #0d1117; border: none; padding: 10px 24px; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
+        .mint-button:hover:not(:disabled) { background: #ff8c73; transform: translateY(-1px); }
+        .mint-button:disabled { opacity: 0.6; cursor: not-allowed; }
         
-        .contract-address-link:hover {
-            opacity: 0.8;
-            text-decoration: underline;
-        }
+        .loading-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #0d1117; border-radius: 50%; border-top-color: transparent; animation: spin 0.8s linear infinite; margin-left: 8px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
         
-        .execute-button {
-            background: #f78166;
-            color: #0d1117;
-            border: none;
-            padding: 10px 24px;
-            border-radius: 6px;
-            font-family: inherit;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+        .success-message { background: #238636; color: white; padding: 12px; border-radius: 6px; font-size: 12px; margin: 20px 0; text-align: center; display: none; }
+        .success-message.show { display: block; }
+        .success-message a { color: #7ee787; text-decoration: none; }
+        .success-message a:hover { text-decoration: underline; }
         
-        .execute-button:hover:not(:disabled) {
-            background: #ff8c73;
-            transform: translateY(-1px);
-        }
-        
-        .execute-button:active:not(:disabled) {
-            transform: translateY(0);
-        }
-        
-        .execute-button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-        
-        /* Connected status */
-        .wallet-status {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            font-size: 12px;
-            color: #7ee787;
-            display: none;
-            align-items: center;
-            gap: 6px;
-        }
-        
-        .wallet-status.connected {
-            display: flex;
-        }
-        
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            background: #7ee787;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        
-        /* Error state */
-        .error-message {
-            background: #f85149;
-            color: white;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-            margin: 8px 0;
-            display: none;
-        }
-        
-        .error-message.show {
-            display: block;
-        }
-        
-        /* NFT Preview - Square format */
-        .nft-container {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            width: 100%;
-            aspect-ratio: 1;
-            margin: 40px auto 20px;
-            display: none;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .nft-container.show {
-            display: flex;
-        }
-        
-        .nft-code-editor {
-            position: relative;
-            width: 100%;
-            padding: 40px 0;
-        }
-        
-        .nft-line-numbers {
-            position: absolute;
-            left: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 30px;
-            text-align: right;
-            color: #484f58;
-            font-size: 12px;
-            line-height: 20px;
-            user-select: none;
-        }
-        
-        .nft-code-content {
-            margin-left: 70px;
-            margin-right: 40px;
-            font-size: 12px;
-            line-height: 20px;
-        }
-        
-        /* Mint button */
-        .mint-button-container {
-            text-align: center;
-            margin-bottom: 40px;
-            display: none;
-        }
-        
-        .mint-button-container.show {
-            display: block;
-        }
-        
-        .mint-button {
-            background: #f78166;
-            color: #0d1117;
-            border: none;
-            padding: 10px 24px;
-            border-radius: 6px;
-            font-family: inherit;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .mint-button:hover:not(:disabled) {
-            background: #ff8c73;
-            transform: translateY(-1px);
-        }
-        
-        .mint-button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-        
-        .loading-spinner {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid #0d1117;
-            border-radius: 50%;
-            border-top-color: transparent;
-            animation: spin 0.8s linear infinite;
-            margin-left: 8px;
-            vertical-align: middle;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        /* Success message */
-        .success-message {
-            background: #238636;
-            color: white;
-            padding: 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            margin: 20px 0;
-            text-align: center;
-            display: none;
-        }
-        
-        .success-message.show {
-            display: block;
-        }
-        
-        .success-message a {
-            color: #7ee787;
-            text-decoration: none;
-        }
-        
-        .success-message a:hover {
-            text-decoration: underline;
-        }
-        
-        /* UPDATED RESPONSIVE STYLES */
         @media (max-width: 600px) {
             .contract-container {
                 border-radius: 0;
+                aspect-ratio: auto;
+                min-height: 500px;
             }
-            
-            .code-editor {
-                /* Reduce side padding on mobile */
-                padding: 40px 0 20px 0;
-            }
-
-            .line-numbers {
-                /* Move line numbers closer to the edge */
-                left: 10px;
-            }
-            
+            .code-editor { padding: 40px 0 20px 0; }
+            .line-numbers { left: 10px; }
             .code-content {
-                /* Reduce side margins significantly */
                 margin-left: 50px;
                 margin-right: 20px;
-                width: calc(100% - 70px); /* Recalculate width based on new margins */
+                width: calc(100% - 70px);
                 font-size: 11px;
             }
-            
             .name-input {
-                /* Make the input take up available space */
-                width: 100%;
-                max-width: 150px;
                 font-size: 11px;
+                width: 30ch;
             }
-            
-            .action-section {
-                /* Allow button to stack under contract address if needed */
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 12px;
-            }
-
-            .execute-button {
-                width: 100%; /* Make button full width for easier tapping */
-                font-size: 14px;
-                padding: 12px 20px;
-            }
+            .action-section { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .execute-button { width: 100%; font-size: 14px; padding: 12px 20px; }
         }
     </style>
 </head>
@@ -476,49 +210,28 @@
                 <span class="filename">DeclarationOfTheDaves.sol</span>
                 <span class="network-badge">Base Mainnet</span>
             </div>
-            
             <div class="wallet-status" id="walletStatus">
                 <span class="status-dot"></span>
                 <span id="walletAddress">Connected</span>
             </div>
-            
             <div class="code-editor">
                 <div class="line-numbers">
-                    <div>1</div>
-                    <div>2</div>
-                    <div>3</div>
-                    <div>4</div>
-                    <div>5</div>
-                    <div>6</div>
-                    <div>7</div>
-                    <div>8</div>
-                    <div>9</div>
-                    <div>10</div>
-                    <div>11</div>
-                    <div>12</div>
-                    <div>13</div>
-                    <div>14</div>
-                    <div>15</div>
-                    <div>16</div>
-                    <div>17</div>
+                    <div>1</div> <div>2</div> <div>3</div> <div>4</div> <div>5</div> <div>6</div> <div>7</div> <div>8</div> <div>9</div> <div>10</div> <div>11</div> <div>12</div> <div>13</div> <div>14</div> <div>15</div> <div>16</div> <div>17</div>
                 </div>
-                
                 <div class="code-content">
-                    <div><span class="keyword">pragma</span> <span class="type">solidity</span> ^0.8.19;</div>
-                    <br>
+                    <div><span class="keyword">pragma</span> <span class="type">solidity</span> ^0.8.19;</div><br>
                     <div class="comment">/**</div>
                     <div class="comment"> * @title THE DECLARATION OF THE DAVES 001</div>
                     <div class="comment"> * @notice THE BANKSY STAYS ON THE WALL</div>
                     <div class="comment"> * @dev This contract is the art. Immutable. Permanent. Public.</div>
                     <div class="comment"> * @dev Co-sign the declaration by calling this function</div>
-                    <div class="comment"> */</div>
-                    <br>
+                    <div class="comment"> */</div><br>
                     <div><span class="keyword">function</span> <span class="function-name">cosignDeclaration</span>(<span class="type">string</span> <span class="type">memory</span> <span class="parameter">chosenName</span>) <span class="keyword">public</span> {</div>
                     <div style="margin-left: 20px;">
                         <div class="comment">// Enter your chosen name (lowercase, max 14 chars)</div>
                         <div class="input-line" id="inputLine" onclick="focusInput()">
                             <span class="input-prefix">require(chosenName == "</span>
-                            <input type="text" class="name-input" id="nameInput" placeholder="your_name" maxlength="14" autocomplete="off" spellcheck="false">
+                            <input type="text" class="name-input" id="nameInput" placeholder="" maxlength="14" autocomplete="off" spellcheck="false">
                             <span class="input-suffix">", "Enter name");</span>
                         </div>
                         <div class="preview-comment">
@@ -527,55 +240,31 @@
                         </div>
                     </div>
                     <div>}</div>
-                    
                     <div class="error-message" id="errorMsg">
                         ⚠️ <span id="errorText">Name can only contain lowercase letters, numbers, and hyphens</span>
                     </div>
                 </div>
             </div>
-            
             <div class="action-section">
                 <div class="contract-info">
                     <div class="contract-label">Contract</div>
-                    <a href="https://basescan.org/address/0xB0731E7ea189c169640Fd890E5dcE9811040D0eA#code" 
-                       target="_blank" 
-                       rel="noopener noreferrer" 
-                       class="contract-address-link">
-                        0xB0731E7ea189c169640Fd890E5dcE9811040D0eA
-                    </a>
+                    <a href="https://basescan.org/address/0xB0731E7ea189c169640Fd890E5dcE9811040D0eA#code" target="_blank" rel="noopener noreferrer" class="contract-address-link">0xB0731E7ea189c169640Fd890E5dcE9811040D0eA</a>
                 </div>
                 <button class="execute-button" id="executeButton">CONNECT WALLET</button>
             </div>
         </div>
         
         <div class="nft-container" id="nftPreview">
-            <div class="nft-code-editor">
+             <div class="nft-code-editor">
                 <div class="nft-line-numbers">
-                    <div>1</div>
-                    <div>2</div>
-                    <div>3</div>
-                    <div>4</div>
-                    <div>5</div>
-                    <div>6</div>
-                    <div>7</div>
-                    <div>8</div>
-                    <div>9</div>
-                    <div>10</div>
-                    <div>11</div>
-                    <div>12</div>
-                    <div>13</div>
-                    <div>14</div>
+                    <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div><div>11</div><div>12</div><div>13</div><div>14</div>
                 </div>
-                
-                <div class="nft-code-content" id="nftContent">
-                    </div>
+                <div class="nft-code-content" id="nftContent"></div>
             </div>
         </div>
-        
         <div class="mint-button-container" id="mintButtonContainer">
             <button class="mint-button" id="mintButton">MINT AS NFT (0.001439 ETH)</button>
         </div>
-        
         <div class="success-message" id="successMessage">
             <div id="successText">NFT Minted Successfully!</div>
             <div style="margin-top: 8px;">
@@ -584,73 +273,46 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js" type="application/javascript"></script>
-    <script src="https://unpkg.com/web3modal@1.9.12/dist/index.js" type="application/javascript"></script>
-    <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js" type="application/javascript"></script>
+    <script type="module">
+        import { createWeb3Modal, ethers5, defaultConfig } from 'https://unpkg.com/@web3modal/ethers5@4.2.2/dist/esm/index.js';
 
-    <script>
+        // --- 1. YOUR PROJECT ID AND METADATA ---
+        const projectId = '77d38351baf64e2ca06e47e979dcf108';
+
+        const metadata = {
+            name: 'Declaration of the Daves',
+            description: 'Co-sign the on-chain declaration.',
+            url: 'https://connect.thebanksy.house',
+            icons: ['https://connect.thebanksy.house/favicon.ico']
+        };
+
+        // --- 2. DEFINE CHAINS ---
+        const base = {
+            chainId: 8453,
+            name: 'Base',
+            currency: 'ETH',
+            explorerUrl: 'https://basescan.org',
+            rpcUrl: 'https://mainnet.base.org'
+        };
+
+        // --- 3. CREATE MODAL ---
+        const modal = createWeb3Modal({
+            ethersConfig: defaultConfig({ metadata }),
+            chains: [base],
+            projectId,
+            enableAnalytics: true,
+            themeMode: 'dark'
+        });
+
+        // --- WIDGET LOGIC ---
         document.addEventListener('DOMContentLoaded', () => {
-            // Web3Modal setup
-            const Web3Modal = window.Web3Modal.default;
-            const WalletConnectProvider = window.WalletConnectProvider.default;
-            
-            const BASE_CHAIN_ID_DEC = 8453;
-            const BASE_CHAIN_ID = '0x2105'; // 8453 in hex
-
-            const providerOptions = {
-                walletconnect: {
-                    package: WalletConnectProvider,
-                    options: {
-                        rpc: {
-                            [BASE_CHAIN_ID_DEC]: 'https://mainnet.base.org'
-                        },
-                        chainId: BASE_CHAIN_ID_DEC
-                    }
-                }
-            };
-
-            const web3Modal = new Web3Modal({
-                cacheProvider: true, 
-                providerOptions,
-                theme: "dark",
-                disableInjectedProvider: false,
-            });
-            
-            // Contract details
             const CONTRACT_ADDRESS = '0xB0731E7ea189c169640Fd890E5dcE9811040D0eA';
             const NFT_CONTRACT_ADDRESS = 'YOUR_NFT_CONTRACT_ADDRESS_HERE';
+            const CONTRACT_ABI = [ "function cosignDeclaration(string memory chosenName) public", "function hasSigned(address) public view returns (bool)", "function signatureByAddress(address) public view returns (string)", "function signatures(uint256) public view returns (tuple(string daveName, address signatory, uint256 timestamp, uint256 blockNumber))", "function totalSignatures() public view returns (uint256)", "function nameExists(string) public view returns (bool)", "event DeclarationSigned(address indexed signatory, string daveName, uint256 signatureNumber, uint256 blockNumber)" ];
+            const NFT_CONTRACT_ABI = [ "function mint(bytes32 _originalTxHash, uint256 _signatureNumber, uint256 _blockNumber) public payable", "function hasMinted(address) public view returns (bool)", "function addressToTokenId(address) public view returns (uint256)", "function MINT_PRICE() public view returns (uint256)" ];
             
-            const CONTRACT_ABI = [
-                "function cosignDeclaration(string memory chosenName) public",
-                "function hasSigned(address) public view returns (bool)",
-                "function signatureByAddress(address) public view returns (string)",
-                "function signatures(uint256) public view returns (tuple(string daveName, address signatory, uint256 timestamp, uint256 blockNumber))",
-                "function totalSignatures() public view returns (uint256)",
-                "function nameExists(string) public view returns (bool)",
-                "function isAllowlistActive() public view returns (bool)",
-                "function timeUntilPublic() public view returns (uint256)",
-                "event DeclarationSigned(address indexed signatory, string daveName, uint256 signatureNumber, uint256 blockNumber)"
-            ];
+            let contract, nftContract, connected = false, currentTxHash, signatureData;
             
-            const NFT_CONTRACT_ABI = [
-                "function mint(bytes32 _originalTxHash, uint256 _signatureNumber, uint256 _blockNumber) public payable",
-                "function hasMinted(address) public view returns (bool)",
-                "function addressToTokenId(address) public view returns (uint256)",
-                "function MINT_PRICE() public view returns (uint256)"
-            ];
-            
-            // State
-            let provider = null;
-            let signer = null;
-            let contract = null;
-            let nftContract = null;
-            let connected = false;
-            let userAddress = null;
-            let currentTxHash = null;
-            let signatureData = null;
-            let providerInstance = null; // To hold the raw provider for event listeners
-            
-            // Elements
             const executeButton = document.getElementById('executeButton');
             const nameInput = document.getElementById('nameInput');
             const errorMsg = document.getElementById('errorMsg');
@@ -667,368 +329,46 @@
             const successText = document.getElementById('successText');
             const openSeaLink = document.getElementById('openSeaLink');
 
-            // --- ALL HELPER AND LOGIC FUNCTIONS (UNCHANGED) ---
-            // Focus input helper
-            window.focusInput = function() {
-                if (!nameInput.disabled) {
-                    nameInput.focus();
-                }
-            };
-            
+            window.focusInput = () => { if (!nameInput.disabled) nameInput.focus(); };
             nameInput.addEventListener('focus', () => inputLine.classList.add('focused'));
             nameInput.addEventListener('blur', () => inputLine.classList.remove('focused'));
-            
             nameInput.addEventListener('input', (e) => {
-                const value = e.target.value.toLowerCase();
-                e.target.value = value;
+                const value = e.target.value.toLowerCase(); e.target.value = value;
                 preview.textContent = value ? `i_am_${value}_dave` : 'i_am_your_name_dave';
                 errorMsg.classList.remove('show');
             });
+            function showError(message) { console.error('[DoD] Error:', message); errorText.textContent = message; errorMsg.classList.add('show'); setTimeout(() => errorMsg.classList.remove('show'), 7000); }
+            function clearMessages() { errorMsg.classList.remove('show'); }
+            function generateNFTPreview(daveName, sigNum, blockNum, txHash, signerAddr) { const shortName = daveName.replace('i_am_', '').replace('_dave', ''); return `<div class="comment">/**</div><div class="comment"> * @title THE DECLARATION OF THE DAVES 001</div><div class="comment"> * @notice THE BANKSY STAYS ON THE WALL</div><div class="comment"> * Signed by: <span class="number">${shortName}_dave</span></div><div class="comment"> */</div><br><div class="comment">// Signature: <span class="number">#${sigNum}</span> | Block: <span class="number">${blockNum}</span></div><br><div class="comment">// Tx Hash:</div><div class="address">${txHash}</div><br><div class="comment">// Signer:</div><div class="address">${signerAddr}</div>`; }
+            async function getSignatureData(address) { try { const totalSigs = await contract.totalSignatures(); for (let i = 0; i < totalSigs; i++) { const sig = await contract.signatures(i); if (sig.signatory.toLowerCase() === address.toLowerCase()) return { daveName: sig.daveName, signatureNumber: i + 1, blockNumber: sig.blockNumber.toString() }; } return null; } catch (error) { console.error('[DoD] Error getting sig data:', error); return null; } }
+            async function checkNFTStatus(userAddr) { if (!nftContract || NFT_CONTRACT_ADDRESS === 'YOUR_NFT_CONTRACT_ADDRESS_HERE') return { canMint: true, hasMinted: false }; try { const hasMinted = await nftContract.hasMinted(userAddr); return { canMint: !hasMinted, hasMinted }; } catch (error) { console.error('[DoD] Error checking NFT status:', error); return { canMint: true, hasMinted: false }; } }
+            async function showExistingSignature(userAddr) { signatureData = await getSignatureData(userAddr); if (!signatureData) { showError('Could not retrieve signature data'); return; } nameInput.disabled = true; inputLine.classList.add('disabled'); document.querySelector('.preview-comment .comment').textContent = '// '; preview.textContent = 'THE BANKSY STAYS ON THE WALL'; executeButton.innerHTML = 'ALREADY SIGNED'; executeButton.disabled = true; nftContent.innerHTML = generateNFTPreview(signatureData.daveName, signatureData.signatureNumber, signatureData.blockNumber, '0x... (original tx not stored)', userAddr); nftPreview.classList.add('show'); const { canMint, hasMinted } = await checkNFTStatus(userAddr); if (hasMinted && NFT_CONTRACT_ADDRESS !== 'YOUR_NFT_CONTRACT_ADDRESS_HERE') { const tokenId = await nftContract.addressToTokenId(userAddr); successText.textContent = `You already minted NFT #${tokenId}`; openSeaLink.href = `https://opensea.io/assets/base/${NFT_CONTRACT_ADDRESS}/${tokenId}`; successMessage.classList.add('show'); } else if (canMint) { mintButtonContainer.classList.add('show'); } if (window.parent !== window) setTimeout(() => window.parent.postMessage({ type: 'resize', height: document.body.scrollHeight }, '*'), 100); }
+            async function signDeclaration() { try { clearMessages(); const name = nameInput.value.trim().toLowerCase(); if (!name) { showError('Please enter a name'); return; } if (name.length > 14) { showError('Name cannot exceed 14 chars'); return; } if (!/^[a-z0-9-]+$/.test(name)) { showError('Only lowercase letters, numbers, hyphens'); return; } const fullName = `i_am_${name}_dave`; const nameExists = await contract.nameExists(fullName); if (nameExists) { showError('This DAVE name is already taken'); return; } executeButton.disabled = true; executeButton.innerHTML = 'SIGNING<span class="loading-spinner"></span>'; const tx = await contract.cosignDeclaration(name); currentTxHash = tx.hash; executeButton.innerHTML = 'CONFIRMING<span class="loading-spinner"></span>'; const txReceipt = await tx.wait(); let sigNum = txReceipt.events?.find(e => e.event === 'DeclarationSigned')?.args.signatureNumber.toString() || 'N/A'; signatureData = { daveName: fullName, signatureNumber: sigNum, blockNumber: txReceipt.blockNumber }; nameInput.disabled = true; inputLine.classList.add('disabled'); document.querySelector('.preview-comment .comment').textContent = '// '; preview.textContent = 'THE BANKSY STAYS ON THE WALL'; executeButton.innerHTML = 'SIGNED'; executeButton.disabled = true; nftContent.innerHTML = generateNFTPreview(fullName, sigNum, txReceipt.blockNumber, tx.hash, modal.getAddress()); nftPreview.classList.add('show'); mintButtonContainer.classList.add('show'); if (window.parent !== window) setTimeout(() => window.parent.postMessage({ type: 'resize', height: document.body.scrollHeight }, '*'), 100); } catch (error) { console.error('[DoD] Sign error:', error); executeButton.disabled = false; executeButton.innerHTML = 'EXECUTE TRANSACTION'; if (error.code === 'ACTION_REJECTED' || error.code === 4001) { showError('Transaction cancelled'); } else { showError('Transaction failed. Please try again.'); } } }
+            async function mintNFT() { if (!nftContract) { showError('NFT contract not deployed yet'); return; } if (!signatureData) { showError('Signature data not found'); return; } try { mintButton.disabled = true; mintButton.innerHTML = 'MINTING<span class="loading-spinner"></span>'; const mintPrice = await nftContract.MINT_PRICE(); const txHashToUse = currentTxHash || '0x0000000000000000000000000000000000000000000000000000000000000000'; const tx = await nftContract.mint(txHashToUse, signatureData.signatureNumber, signatureData.blockNumber, { value: mintPrice }); mintButton.innerHTML = 'CONFIRMING<span class="loading-spinner"></span>'; await tx.wait(); const tokenId = await nftContract.addressToTokenId(modal.getAddress()); mintButtonContainer.classList.remove('show'); successText.textContent = `NFT #${tokenId} Minted!`; openSeaLink.href = `https://opensea.io/assets/base/${NFT_CONTRACT_ADDRESS}/${tokenId}`; successMessage.classList.add('show'); } catch (error) { console.error('[DoD] Mint error:', error); mintButton.disabled = false; mintButton.innerHTML = 'MINT AS NFT (0.001439 ETH)'; if (error.code === 'ACTION_REJECTED' || error.code === 4001) { showError('Transaction cancelled'); } else { showError('Minting failed.'); } } }
             
-            function showError(message) {
-                console.error('[Dave Contract] Error:', message);
-                errorText.textContent = message;
-                errorMsg.classList.add('show');
-                setTimeout(() => errorMsg.classList.remove('show'), 7000);
+            async function onConnect(userAddress) {
+                const walletProvider = modal.getWalletProvider();
+                if (!walletProvider) { showError("Could not get wallet provider."); return; }
+                const provider = new ethers5.providers.Web3Provider(walletProvider);
+                const signer = provider.getSigner();
+                contract = new ethers5.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+                if (NFT_CONTRACT_ADDRESS !== 'YOUR_NFT_CONTRACT_ADDRESS_HERE') nftContract = new ethers5.Contract(NFT_CONTRACT_ABI, signer);
+                walletAddress.textContent = `Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
+                walletStatus.classList.add('connected');
+                const hasUserSigned = await contract.hasSigned(userAddress);
+                if (hasUserSigned) { await showExistingSignature(userAddress); } 
+                else { connected = true; executeButton.innerHTML = 'EXECUTE TRANSACTION'; executeButton.disabled = false; }
             }
-            
-            function clearMessages() {
-                errorMsg.classList.remove('show');
-            }
-            
-            function generateNFTPreview(daveName, signatureNumber, blockNumber, txHash, signerAddr) {
-                const shortName = daveName.replace('i_am_', '').replace('_dave', '');
-                return `<div class="comment">/**</div>
-<div class="comment"> * @title THE DECLARATION OF THE DAVES 001</div>
-<div class="comment"> * Contract: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA</div>
-<div class="comment"> * @notice THE BANKSY STAYS ON THE WALL</div>
-<div class="comment"> * Signed by: <span class="number">${shortName}_dave</span></div>
-<div class="comment"> */</div>
-<br>
-<div class="comment">// Signature Number: <span class="number">#${signatureNumber}</span></div>
-<div class="comment">// Block Number: <span class="number">${blockNumber}</span></div>
-<br>
-<div class="comment">// Transaction Hash:</div>
-<div class="address">${txHash}</div>
-<br>
-<div class="comment">// Signer Address:</div>
-<div class="address">${signerAddr}</div>`;
-            }
+            function resetUI() { connected = false; executeButton.innerHTML = 'CONNECT WALLET'; executeButton.disabled = false; walletStatus.classList.remove('connected'); clearMessages(); nameInput.disabled = false; inputLine.classList.remove('disabled'); nftPreview.classList.remove('show'); mintButtonContainer.classList.remove('show'); successMessage.classList.remove('show'); }
 
-            // *** SLIGHTLY REFACTORED FOR EFFICIENCY ***
-            async function getSignatureData(address) {
-                try {
-                    const totalSigs = await contract.totalSignatures();
-                    for (let i = 0; i < totalSigs; i++) {
-                        const sig = await contract.signatures(i);
-                        if (sig.signatory.toLowerCase() === address.toLowerCase()) {
-                            return {
-                                daveName: sig.daveName,
-                                signatureNumber: i + 1,
-                                blockNumber: sig.blockNumber.toString(),
-                                timestamp: sig.timestamp.toString()
-                            };
-                        }
-                    }
-                    return null;
-                } catch (error) {
-                    console.error('[Dave Contract] Error getting signature data:', error);
-                    return null;
-                }
-            }
-            
-            async function checkNFTStatus() {
-                if (!nftContract || NFT_CONTRACT_ADDRESS === 'YOUR_NFT_CONTRACT_ADDRESS_HERE') {
-                    return { canMint: true, hasMinted: false };
-                }
-                try {
-                    const hasMinted = await nftContract.hasMinted(userAddress);
-                    return { canMint: !hasMinted, hasMinted };
-                } catch (error) {
-                    console.error('[Dave Contract] Error checking NFT status:', error);
-                    return { canMint: true, hasMinted: false };
-                }
-            }
-            
-            async function showExistingSignature() {
-                signatureData = await getSignatureData(userAddress);
-                if (!signatureData) {
-                    showError('Could not retrieve signature data');
-                    return;
-                }
-                
-                nameInput.disabled = true;
-                nameInput.value = '';
-                inputLine.classList.add('disabled');
-                document.querySelector('.preview-comment .comment').textContent = '// ';
-                preview.textContent = 'THE BANKSY STAYS ON THE WALL';
-                executeButton.innerHTML = 'ALREADY SIGNED';
-                executeButton.disabled = true;
-                
-                nftContent.innerHTML = generateNFTPreview(
-                    signatureData.daveName,
-                    signatureData.signatureNumber,
-                    signatureData.blockNumber,
-                    '0x... (retroactive mint - original tx not stored)',
-                    userAddress
-                );
-                nftPreview.classList.add('show');
-                
-                const { canMint, hasMinted } = await checkNFTStatus();
-                if (hasMinted && NFT_CONTRACT_ADDRESS !== 'YOUR_NFT_CONTRACT_ADDRESS_HERE') {
-                    const tokenId = await nftContract.addressToTokenId(userAddress);
-                    successText.textContent = `You already minted NFT #${tokenId}`;
-                    openSeaLink.href = `https://opensea.io/assets/base/${NFT_CONTRACT_ADDRESS}/${tokenId}`;
-                    successMessage.classList.add('show');
-                } else if (canMint) {
-                    mintButtonContainer.classList.add('show');
-                    mintButton.title = 'Retroactive mint - will be marked as pre-NFT signature';
-                }
-                
-                setTimeout(() => {
-                    if (window.parent !== window) {
-                        window.parent.postMessage({ type: 'resize', height: document.body.scrollHeight }, '*');
-                    }
-                }, 100);
-            }
-            
-            async function signDeclaration() {
-                // ... This function remains exactly the same as your original ...
-                try {
-                    clearMessages();
-                    const name = nameInput.value.trim().toLowerCase();
-                    if (!name) { showError('Please enter a name'); return; }
-                    if (name.length > 14) { showError('Name cannot exceed 14 characters'); return; }
-                    if (!/^[a-z0-9-]+$/.test(name)) { showError('Only lowercase letters, numbers, and hyphens allowed'); return; }
-
-                    const fullName = `i_am_${name}_dave`;
-                    const nameExists = await contract.nameExists(fullName);
-                    if (nameExists) { showError('This DAVE name is already taken'); return; }
-                    
-                    executeButton.disabled = true;
-                    executeButton.innerHTML = 'SIGNING<span class="loading-spinner"></span>';
-                    
-                    const tx = await contract.cosignDeclaration(name);
-                    currentTxHash = tx.hash;
-                    executeButton.innerHTML = 'CONFIRMING<span class="loading-spinner"></span>';
-                    
-                    const txReceipt = await tx.wait();
-                    
-                    let signatureNumber = 'N/A';
-                    const event = txReceipt.events?.find(e => e.event === 'DeclarationSigned');
-                    if (event) {
-                        signatureNumber = event.args.signatureNumber.toString();
-                    }
-                    
-                    signatureData = {
-                        daveName: fullName,
-                        signatureNumber: signatureNumber,
-                        blockNumber: txReceipt.blockNumber,
-                        timestamp: Date.now()
-                    };
-                    
-                    nameInput.value = '';
-                    nameInput.disabled = true;
-                    inputLine.classList.add('disabled');
-                    document.querySelector('.preview-comment .comment').textContent = '// ';
-                    preview.textContent = 'THE BANKSY STAYS ON THE WALL';
-                    executeButton.innerHTML = 'SIGNED';
-                    executeButton.disabled = true;
-                    
-                    nftContent.innerHTML = generateNFTPreview(
-                        fullName, signatureNumber, txReceipt.blockNumber, tx.hash, userAddress
-                    );
-                    
-                    nftPreview.classList.add('show');
-                    mintButtonContainer.classList.add('show');
-                    
-                    setTimeout(() => {
-                        if (window.parent !== window) {
-                            window.parent.postMessage({ type: 'resize', height: document.body.scrollHeight }, '*');
-                        }
-                    }, 100);
-                    
-                } catch (error) {
-                    console.error('[Dave Contract] Sign error:', error);
-                    executeButton.disabled = false;
-                    executeButton.innerHTML = 'EXECUTE TRANSACTION';
-                    if (error.code === 'ACTION_REJECTED' || error.code === 4001) { showError('Transaction cancelled'); } 
-                    else if (error.message?.includes('allowlisted')) { showError('Only allowlisted addresses can sign during this period'); }
-                    else { showError('Transaction failed. Please try again.'); }
-                }
-            }
-            
-            async function mintNFT() {
-                // ... This function remains exactly the same as your original ...
-                if (!nftContract) { showError('NFT contract not deployed yet'); return; }
-                if (!signatureData) { showError('Signature data not found'); return; }
-                
-                try {
-                    mintButton.disabled = true;
-                    mintButton.innerHTML = 'MINTING<span class="loading-spinner"></span>';
-                    
-                    const mintPrice = await nftContract.MINT_PRICE();
-                    const txHashToUse = currentTxHash || '0x0000000000000000000000000000000000000000000000000000000000000000';
-                    
-                    const tx = await nftContract.mint(
-                        txHashToUse,
-                        signatureData.signatureNumber,
-                        signatureData.blockNumber,
-                        { value: mintPrice }
-                    );
-                    
-                    mintButton.innerHTML = 'CONFIRMING<span class="loading-spinner"></span>';
-                    await tx.wait();
-                    const tokenId = await nftContract.addressToTokenId(userAddress);
-                    
-                    mintButtonContainer.classList.remove('show');
-                    successText.textContent = `NFT #${tokenId} Minted Successfully!`;
-                    openSeaLink.href = `https://opensea.io/assets/base/${NFT_CONTRACT_ADDRESS}/${tokenId}`;
-                    successMessage.classList.add('show');
-                    
-                } catch (error) {
-                    console.error('[Dave Contract] Mint error:', error);
-                    mintButton.disabled = false;
-                    mintButton.innerHTML = 'MINT AS NFT (0.001439 ETH)';
-                    if (error.code === 'ACTION_REJECTED' || error.code === 4001) { showError('Transaction cancelled'); }
-                    else if (error.message?.includes('Already minted')) { showError('You have already minted your NFT'); }
-                    else if (error.message?.includes('Insufficient')) { showError('Insufficient funds for minting'); }
-                    else { showError('Minting failed. Please try again.'); }
-                }
-            }
-
-            // --- NEW CONNECTION LOGIC ---
-
-            async function onConnect() {
-                try {
-                    executeButton.disabled = true;
-                    executeButton.innerHTML = 'CONNECTING...';
-
-                    providerInstance = await web3Modal.connect();
-                    provider = new ethers.providers.Web3Provider(providerInstance);
-                    
-                    const network = await provider.getNetwork();
-                    if (network.chainId !== BASE_CHAIN_ID_DEC) {
-                        try {
-                           await providerInstance.request({
-                                method: 'wallet_switchEthereumChain',
-                                params: [{ chainId: BASE_CHAIN_ID }],
-                           });
-                           // Re-initialize provider after chain switch
-                           provider = new ethers.providers.Web3Provider(providerInstance);
-                        } catch (switchError) {
-                            if (switchError.code === 4902) {
-                                showError('Please add Base network to your wallet');
-                            } else {
-                                showError('Please switch to Base network');
-                            }
-                            await onDisconnect();
-                            return;
-                        }
-                    }
-
-                    signer = provider.getSigner();
-                    userAddress = await signer.getAddress();
-                    contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-                    if (NFT_CONTRACT_ADDRESS !== 'YOUR_NFT_CONTRACT_ADDRESS_HERE') {
-                        nftContract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_CONTRACT_ABI, signer);
-                    }
-
-                    walletAddress.textContent = `Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
-                    walletStatus.classList.add('connected');
-                    
-                    // *** REFACTORED TO USE EFFICIENT `hasSigned` CHECK FIRST ***
-                    const hasUserSigned = await contract.hasSigned(userAddress);
-                    
-                    if (hasUserSigned) {
-                        console.log('[Dave Contract] User already signed, showing NFT preview');
-                        await showExistingSignature();
-                    } else {
-                        connected = true;
-                        executeButton.innerHTML = 'EXECUTE TRANSACTION';
-                        executeButton.disabled = false;
-                        console.log('[Dave Contract] Connection successful! Ready to sign.');
-                    }
-                    
-                    // Subscribe to events
-                    subscribeToProviderEvents();
-
-                } catch (error) {
-                    console.error("Could not connect to wallet", error);
-                    showError('Connection failed. Please try again.');
-                    await onDisconnect();
-                }
-            }
-
-            async function onDisconnect() {
-                if (providerInstance && providerInstance.close) {
-                    await providerInstance.close();
-                }
-                web3Modal.clearCachedProvider();
-                
-                connected = false;
-                provider = null;
-                signer = null;
-                userAddress = null;
-                providerInstance = null;
-
-                executeButton.innerHTML = 'CONNECT WALLET';
-                executeButton.disabled = false;
-                walletStatus.classList.remove('connected');
-                clearMessages();
-                
-                // Reset UI to initial state
-                nameInput.disabled = false;
-                nameInput.value = '';
-                inputLine.classList.remove('disabled');
-                nftPreview.classList.remove('show');
-                mintButtonContainer.classList.remove('show');
-                successMessage.classList.remove('show');
-                document.querySelector('.preview-comment .comment').textContent = '// Your signature will be: ';
-                preview.textContent = 'i_am_your_name_dave';
-            }
-
-            function subscribeToProviderEvents() {
-                if (!providerInstance) return;
-
-                providerInstance.on("accountsChanged", (accounts) => {
-                    console.log("Account changed, reloading...");
-                    window.location.reload();
-                });
-
-                providerInstance.on("chainChanged", (chainId) => {
-                    console.log("Network changed, reloading...");
-                    window.location.reload();
-                });
-
-                providerInstance.on("disconnect", (error) => {
-                    console.log("Disconnected from provider");
-                    onDisconnect();
-                });
-            }
-            
-            // --- BUTTON HANDLERS ---
-            executeButton.addEventListener('click', async () => {
-                if (!connected) {
-                    await onConnect();
-                } else {
-                    await signDeclaration();
-                }
+            modal.subscribeProvider(async ({ address, isConnected }) => {
+                if (isConnected && address) { onConnect(address); } 
+                else { resetUI(); }
             });
-            
+            executeButton.addEventListener('click', async () => { if (!modal.getIsConnected()) { modal.open(); } else { await signDeclaration(); } });
             mintButton.addEventListener('click', mintNFT);
-            
-            nameInput.addEventListener('keypress', async (e) => {
-                if (e.key === 'Enter' && connected && !nameInput.disabled) {
-                    await signDeclaration();
-                }
-            });
-            
-            // Auto-focus input and check for cached provider
+            nameInput.addEventListener('keypress', async (e) => { if (e.key === 'Enter' && connected && !nameInput.disabled) await signDeclaration(); });
             nameInput.focus();
-            if (web3Modal.cachedProvider) {
-                onConnect();
-            }
         });
     </script>
 </body>
