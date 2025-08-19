@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Declaration of the Daves — Connect</title>
+  <meta name="description" content="Co-sign the Declaration on Base, then mint your on-chain proof." />
+  <link rel="icon" href="/icon.png" />
+  <style>
+    :root { --space: clamp(12px, 2.5vw, 20px); --radius: 16px; }
+    html, body { height: 100%; }
+    body { margin:0; font-family: system-ui,-apple-system,'Segoe UI',Roboto,Inter,sans-serif; background:#0a0b0e; color:#e9eaee; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: var(--space); display:grid; gap:var(--space); }
+    .card { background:#0e0f12; border-radius:var(--radius); padding:var(--space); border:1px solid #1b1e26; }
+    h1,h2{ margin:0 0 .5em; line-height:1.15 }
+    h1{ font-size: clamp(20px, 5.5vw, 28px); }
+    h2{ font-size: clamp(18px, 4.8vw, 24px); }
+    p,button,input,label,small{ font-size: clamp(14px, 3.5vw, 16px); }
+    .row{ display:grid; gap:12px; grid-template-columns: 1fr; }
+    @media(min-width:720px){ .row{ grid-template-columns:1fr 1fr; } }
+    button{ width:100%; padding:12px 14px; border-radius:12px; border:1px solid #2a2d36; background:#171a21; color:#e9eaee; cursor:pointer; }
+    button:disabled{ opacity:.6; cursor:not-allowed; }
+    .input{ width:100%; padding:12px 14px; border-radius:10px; border:1px solid #2a2d36; background:#0b0c10; color:#e9eaee; }
+    .muted{ color:#a6a8b2; margin-top:6px; }
+    .warning{ color:#ffcc66; }
+    .pre{ white-space:pre-wrap; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; background:#0b0c10; padding:12px; border-radius:10px; border:1px solid #1b1e26; }
+    .pill{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:#12151b; border:1px solid #222534; }
+    code{ background:#0b0c10; padding:0 6px; border-radius:6px; border:1px solid #1b1e26; }
+    .text-wrap{ overflow-wrap:anywhere; }
+    a.btn{ color:#e9eaee; text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="iframeBanner" class="card" style="display:none">
+      <p class="text-wrap">Wallets often fail inside embedded views on iOS. Open securely to continue.</p>
+      <p><a class="btn" id="openTop" href="#" target="_top"><button>Open securely</button></a></p>
+    </div>
+
+    <div class="card">
+      <h1>Declaration of the Daves</h1>
+      <p class="muted">Connect a wallet on Base, co-sign with a DAVE name, then mint your on-chain proof when mint goes live.</p>
+      <div class="row">
+        <button id="connectBtn">Connect wallet</button>
+        <button id="disconnectBtn" style="display:none">Disconnect</button>
+      </div>
+      <p class="muted" id="connInfo" style="margin-top:10px"></p>
+    </div>
+
+    <div class="card">
+      <h2>1) Co-sign the Declaration</h2>
+
+      <div id="statusLine" class="pill" style="display:none"></div>
+      <p id="myDave" class="muted"></p>
+
+      <label for="daveName">Choose your DAVE name</label>
+      <input id="daveName" class="input" placeholder="e.g. banksy" maxlength="14" />
+      <p class="muted">Rules: 1–14 chars, a–z, 0–9, and hyphen. Becomes <code>i_am_<span id="preview">yourname</span>_dave</code>.</p>
+
+      <p class="muted" id="allowMsg"></p>
+      <div class="row">
+        <button id="signBtn" disabled>Sign now</button>
+      </div>
+      <p id="txOut" class="muted"></p>
+    </div>
+
+    <div class="card">
+      <h2>2) Mint your on-chain proof</h2>
+      <p class="muted">Mint goes live after the NFT contract is deployed.</p>
+      <button id="mintBtn" disabled>Mint SVG NFT</button>
+    </div>
+
+    <div id="how" class="card" style="display:none">
+      <h2>How it works</h2>
+      <div id="instructions" class="pre"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    // ===== Config =====
+    const APP_URL = 'https://connect.thebanksy.house'
+    const PROJECT_ID = 'c6e735ab923e4817edde143987bdfccf'   // WalletConnect / Reown
+    const DECLARATION_ADDR = '0xB0731E7ea189c169640Fd890E5dcE9811040D0eA'
+    const BASE_ID = 8453
+    const BASE_RPC = 'https://mainnet.base.org'
+
+    // ===== Imports (ESM via CDN) =====
+    import EthereumProvider from 'https://esm.sh/@walletconnect/ethereum-provider@2.11.0'
+    import {
+      createPublicClient, createWalletClient, http, custom,
+      parseAbi, isAddress
+    } from 'https://esm.sh/viem@2.14.1'
+    import { base } from 'https://esm.sh/viem@2.14.1/chains'
+
+    // ===== ABIs (minimal) =====
+    const declarationAbi = parseAbi([
+      'function hasSigned(address) view returns (bool)',
+      'function signatureByAddress(address) view returns (string)',
+      'function nameExists(string) view returns (bool)',
+      'function cosignDeclaration(string)',
+      'function isAllowlistActive() view returns (bool)',
+      'function isAllowlisted(address) view returns (bool)',
+      'function timeUntilPublic() view returns (uint256)',
+      'function readInstructions() view returns (string)'
+    ])
+
+    // ===== DOM =====
+    const connectBtn = document.getElementById('connectBtn')
+    const disconnectBtn = document.getElementById('disconnectBtn')
+    const signBtn = document.getElementById('signBtn')
+    const mintBtn = document.getElementById('mintBtn') // disabled until NFT live
+    const daveInput = document.getElementById('daveName')
+    const preview = document.getElementById('preview')
+    const allowMsg = document.getElementById('allowMsg')
+    const statusLine = document.getElementById('statusLine')
+    const myDave = document.getElementById('myDave')
+    const connInfo = document.getElementById('connInfo')
+    const txOut = document.getElementById('txOut')
+    const how = document.getElementById('how')
+    const instructionsEl = document.getElementById('instructions')
+
+    // ===== State =====
+    let eip6963Providers = []
+    let injected = null
+    let wcProvider = null
+    let walletClient = null
+    let address = null
+
+    // ===== Helpers =====
+    const validName = s => /^[a-z0-9-]{1,14}$/.test(s)
+    const short = a => a ? `${a.slice(0,6)}…${a.slice(-4)}` : ''
+    const inIframe = () => window.top !== window.self
+    const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent)
+    const inApp = () => /(FBAN|FBAV|Instagram|Line\/|Twitter)/i.test(navigator.userAgent)
+
+    // iOS iframe escape
+    const iframeBanner = document.getElementById('iframeBanner')
+    if (inIframe() && isIOS()) {
+      iframeBanner.style.display = ''
+      document.getElementById('openTop').href = window.location.href
+    }
+
+    // EIP-6963 discovery
+    window.addEventListener('eip6963:announceProvider', (event) => {
+      eip6963Providers.push(event.detail)
+    })
+    window.dispatchEvent(new Event('eip6963:requestProvider'))
+
+    // Fallback to window.ethereum
+    injected = window.ethereum || null
+
+    const publicClient = createPublicClient({ chain: base, transport: http(BASE_RPC) })
+
+    async function ensureBase(provider) {
+      try {
+        await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x2105' }] }) // 8453
+      } catch (err) {
+        // 4902 = chain not added
+        if (err && err.code === 4902) {
+          await provider.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x2105',
+              chainName: 'Base',
+              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+              rpcUrls: [BASE_RPC],
+              blockExplorerUrls: ['https://basescan.org']
+            }]
+          })
+        } else {
+          throw err
+        }
+      }
+    }
+
+    async function connect() {
+      txOut.textContent = ''
+      connInfo.textContent = 'Connecting…'
+
+      // Prefer an injected provider if available
+      const injectedProv = eip6963Providers[0]?.provider || injected
+      if (injectedProv) {
+        try {
+          await ensureBase(injectedProv)
+          const accts = await injectedProv.request({ method: 'eth_requestAccounts' })
+          address = accts[0]
+          walletClient = createWalletClient({ chain: base, transport: custom(injectedProv) })
+          onConnected('Browser wallet')
+          return
+        } catch (e) {
+          console.warn('Injected connect failed, falling back to WalletConnect', e)
+        }
+      }
+
+      // WalletConnect v2 with built-in QR modal
+      wcProvider = await EthereumProvider.init({
+        projectId: PROJECT_ID,
+        chains: [BASE_ID],
+        showQrModal: true,
+        rpcMap: { [BASE_ID]: BASE_RPC },
+        methods: ['eth_sendTransaction','personal_sign','eth_sign','eth_signTypedData','wallet_switchEthereumChain','wallet_addEthereumChain']
+      })
+      await wcProvider.enable()
+      address = (await wcProvider.request({ method:'eth_accounts' }))[0]
+      walletClient = createWalletClient({ chain: base, transport: custom(wcProvider) })
+      onConnected('WalletConnect')
+    }
+
+    function onConnected(kind) {
+      connectBtn.style.display = 'none'
+      disconnectBtn.style.display = ''
+      connInfo.textContent = `${kind} connected: ${short(address)} on Base`
+      signBtn.disabled = !validName(daveInput.value)
+      refreshStatus().catch(console.error)
+      loadInstructions().catch(console.error)
+    }
+
+    async function disconnect() {
+      address = null
+      walletClient = null
+      if (wcProvider?.disconnect) {
+        try { await wcProvider.disconnect() } catch {}
+      }
+      connectBtn.style.display = ''
+      disconnectBtn.style.display = 'none'
+      connInfo.textContent = ''
+      myDave.textContent = ''
+      statusLine.style.display = 'none'
+      txOut.textContent = ''
+    }
+
+    async function refreshStatus() {
+      if (!address) return
+      const [signed, dname, allowActive, allowlisted, secs] = await Promise.all([
+        publicClient.readContract({ address: DECLARATION_ADDR, abi: declarationAbi, functionName: 'hasSigned', args:[address] }),
+        publicClient.readContract({ address: DECLARATION_ADDR, abi: declarationAbi, functionName: 'signatureByAddress', args:[address] }),
+        publicClient.readContract({ address: DECLARATION_ADDR, abi: declarationAbi, functionName: 'isAllowlistActive' }),
+        publicClient.readContract({ address: DECLARATION_ADDR, abi: declarationAbi, functionName: 'isAllowlisted', args:[address] }),
+        publicClient.readContract({ address: DECLARATION_ADDR, abi: declarationAbi, functionName: 'timeUntilPublic' })
+      ])
+
+      statusLine.style.display = ''
+      statusLine.textContent = signed ? 'Already signed' : 'Not signed yet'
+      myDave.textContent = signed && dname ? `Your signature: ${dname}` : ''
+      if (allowActive) {
+        allowMsg.textContent = `Allowlist is active. ${allowlisted ? 'You are allowlisted.' : 'You are not allowlisted.'} Public in ~${Number(secs)}s`
+      } else {
+        allowMsg.textContent = 'Public co-signing is open.'
+      }
+      signBtn.disabled = signed || (allowActive && !allowlisted) || !validName(daveInput.value)
+    }
+
+    async function loadInstructions() {
+      const text = await publicClient.readContract({ address: DECLARATION_ADDR, abi: declarationAbi, functionName: 'readInstructions' })
+      if (text && String(text).length) {
+        how.style.display = ''
+        instructionsEl.textContent = String(text)
+      }
+    }
+
+    daveInput.addEventListener('input', () => {
+      daveInput.value = daveInput.value.toLowerCase()
+      const n = daveInput.value
+      preview.textContent = n || 'yourname'
+      signBtn.disabled = !address || !validName(n)
+    })
+
+    signBtn.addEventListener('click', async () => {
+      try {
+        if (!walletClient || !address) throw new Error('Connect a wallet first')
+        const n = daveInput.value
+        if (!validName(n)) throw new Error('Use 1–14 chars, a–z, 0–9, or hyphen')
+
+        txOut.textContent = 'Sending transaction…'
+        const hash = await walletClient.writeContract({
+          address: DECLARATION_ADDR,
+          abi: declarationAbi,
+          functionName: 'cosignDeclaration',
+          args: [n]
+        })
+        txOut.innerHTML = `Submitted: <code>${hash}</code>. Waiting for confirmation…`
+        await publicClient.waitForTransactionReceipt({ hash })
+        txOut.innerHTML = `Confirmed: <code>${hash}</code>.`
+        await refreshStatus()
+      } catch (e) {
+        txOut.textContent = `Error: ${e?.shortMessage || e?.message || e}`
+      }
+    })
+
+    connectBtn.addEventListener('click', connect)
+    disconnectBtn.addEventListener('click', disconnect)
+
+    // UX: warn about in-app browsers
+    if (inApp()) {
+      connInfo.textContent = 'Tip: in-app browsers can block wallets. Use Safari or Chrome.'
+    }
+  </script>
+</body>
+</html>
