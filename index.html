@@ -4,11 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Declaration of the Daves - Sign the Contract</title>
-
-  <!-- Allow embedding in iframes -->
   <meta http-equiv="X-Frame-Options" content="ALLOWALL" />
 
-  <!-- Perf hints for ESM -->
+  <!-- Preconnects -->
   <link rel="preconnect" href="https://esm.sh" crossorigin />
   <link rel="dns-prefetch" href="https://esm.sh" />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
@@ -17,40 +15,37 @@
   <!-- Font -->
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 
-  <!-- Reown/AppKit loader (ESM). Await createAppKit, then set window.daveModal + __appkitReady -->
+  <!-- Reown/AppKit (ESM) with multi-CDN fallback. Await createAppKit and expose modal+ready. -->
   <script type="module">
     window.__appkitReady = false;
     window.__appkitError = '';
 
-    async function loadAppKitESM() {
-      const sources = [
-        { appkit:'https://esm.sh/@reown/appkit@1?bundle',
-          adapter:'https://esm.sh/@reown/appkit-adapter-ethers5@1?bundle', label:'esm.sh' },
-        { appkit:'https://cdn.jsdelivr.net/npm/@reown/appkit@1/+esm',
-          adapter:'https://cdn.jsdelivr.net/npm/@reown/appkit-adapter-ethers5@1/+esm', label:'jsdelivr +esm' },
-        { appkit:'https://unpkg.com/@reown/appkit@1/dist/index.js?module',
-          adapter:'https://unpkg.com/@reown/appkit-adapter-ethers5@1/dist/index.js?module', label:'unpkg ?module' }
+    async function loadAppKitESM () {
+      const candidates = [
+        { appkit:'https://esm.sh/@reown/appkit@1?bundle', adapter:'https://esm.sh/@reown/appkit-adapter-ethers5@1?bundle', tag:'esm.sh' },
+        { appkit:'https://cdn.jsdelivr.net/npm/@reown/appkit@1/+esm', adapter:'https://cdn.jsdelivr.net/npm/@reown/appkit-adapter-ethers5@1/+esm', tag:'jsdelivr+esm' },
+        { appkit:'https://unpkg.com/@reown/appkit@1/dist/index.js?module', adapter:'https://unpkg.com/@reown/appkit-adapter-ethers5@1/dist/index.js?module', tag:'unpkg?module' }
       ];
-      let lastErr = null;
-      for (const src of sources) {
+      let lastErr;
+      for (const c of candidates) {
         try {
-          const appkitMod  = await import(src.appkit);
-          const adapterMod = await import(src.adapter);
-          const createAppKit = appkitMod.createAppKit || (appkitMod.default && appkitMod.default.createAppKit) || appkitMod.default || appkitMod;
-          const Ethers5Adapter = adapterMod.Ethers5Adapter || (adapterMod.default && adapterMod.default.Ethers5Adapter) || adapterMod.default || adapterMod;
-          if (typeof createAppKit !== 'function') throw new Error(`createAppKit not found via ${src.label}`);
-          if (typeof Ethers5Adapter !== 'function') throw new Error(`Ethers5Adapter not found via ${src.label}`);
+          const app = await import(c.appkit);
+          const adp = await import(c.adapter);
+          const createAppKit = app.createAppKit || app.default?.createAppKit || app.default || app;
+          const Ethers5Adapter = adp.Ethers5Adapter || adp.default?.Ethers5Adapter || adp.default || adp;
+          if (typeof createAppKit !== 'function') throw new Error(`No createAppKit via ${c.tag}`);
+          if (typeof Ethers5Adapter !== 'function') throw new Error(`No Ethers5Adapter via ${c.tag}`);
           return { createAppKit, Ethers5Adapter };
-        } catch (e) { lastErr = e; console.error(`AppKit import failed`, src.label, e); }
+        } catch (e) { lastErr = e; console.error('AppKit import failed', c.tag, e); }
       }
-      throw lastErr || new Error('Failed to import AppKit');
+      throw lastErr || new Error('AppKit ESM import failed');
     }
 
     (async () => {
       try {
         const { createAppKit, Ethers5Adapter } = await loadAppKitESM();
 
-        // Inline Base network
+        // Inline Base network; avoid extra imports.
         const base = {
           id: 8453,
           name: 'Base',
@@ -59,13 +54,30 @@
           nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }
         };
 
+        // Force key wallets to show in the catalog (Coinbase, MetaMask, Trust)
+        const FEATURED = [
+          'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa', // Coinbase Wallet
+          'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
+          '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0'  // Trust Wallet
+        ];
+
+        // Hide social/email (source of "Unsupported chains (5100)" in some routes).
         const modal = await createAppKit({
           adapters: [new Ethers5Adapter()],
           networks: [base],
           defaultNetwork: base,
           projectId: 'c6e735ab923e4817edde143987bdfccf',
           themeMode: 'dark',
-          features: { analytics: false },
+          enableWallets: true,
+          enableWalletConnect: true,
+          featuredWalletIds: FEATURED,
+          features: {
+            analytics: false,
+            email: false,
+            socials: false,
+            connectMethodsOrder: ['wallet'] // prefer wallet tab
+          },
+          debug: true,
           metadata: {
             name: 'Declaration of the Daves',
             description: 'Sign the declaration on Base',
@@ -78,7 +90,7 @@
         window.__appkitReady = true;
       } catch (e) {
         console.error('AppKit init failed', e);
-        window.__appkitError = (e && (e.message || String(e))) || 'unknown';
+        window.__appkitError = e?.message || String(e) || 'unknown';
         window.__appkitReady = false;
       }
     })();
@@ -98,22 +110,36 @@
     }
     .widget-container { max-width:600px; margin:0 auto; width:100%; }
 
-    .contract-container { background:var(--panel); border:1px solid var(--border); border-radius:6px; width:100%;
-      aspect-ratio:1; overflow:hidden; display:flex; flex-direction:column; }
+    /* Main contract container (desktop/tablet keeps square look) */
+    .contract-container {
+      background:var(--panel); border:1px solid var(--border); border-radius:6px; width:100%;
+      aspect-ratio:1; overflow:hidden; display:flex; flex-direction:column;
+    }
 
-    .contract-header { background:var(--bg); border-bottom:1px solid var(--border); padding:12px 20px;
-      display:flex; align-items:center; gap:8px; min-width:0; }
+    .contract-header {
+      background:var(--bg); border-bottom:1px solid var(--border); padding:12px 20px;
+      display:flex; align-items:center; gap:8px; min-width:0;
+    }
     .file-icon{ color:var(--green); flex:0 0 auto; }
-    .filename{ color:var(--white); font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
-    .network-badge{ margin-left:auto; background:var(--blue); color:#fff; padding:4px 12px; border-radius:20px; font-size:12px;
-      white-space:nowrap; flex:0 0 auto; align-self:center; line-height:1; }
+    .filename{
+      color:var(--white); font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;
+    }
+    .network-badge{
+      margin-left:auto; background:var(--blue); color:#fff; padding:4px 12px; border-radius:20px; font-size:12px;
+      white-space:nowrap; flex:0 0 auto; align-self:center; line-height:1;
+    }
 
     .code-editor{ flex:1; position:relative; display:flex; align-items:center; padding:40px 0; }
-    .line-numbers{ position:absolute; left:20px; top:50%; transform:translateY(-50%);
-      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none; }
-    .code-content{ margin-left:70px; margin-right:40px; font-size:12px; line-height:20px; width:calc(100% - 110px);
-      overflow-wrap:anywhere; word-break:break-word; }
+    .line-numbers{
+      position:absolute; left:20px; top:50%; transform:translateY(-50%);
+      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none;
+    }
+    .code-content{
+      margin-left:70px; margin-right:40px; font-size:12px; line-height:20px; width:calc(100% - 110px);
+      overflow-wrap:anywhere; word-break:break-word;
+    }
 
+    /* Syntax highlighting */
     .comment{ color:var(--muted); font-style:italic; }
     .keyword{ color:#ff7b72; }
     .function-name{ color:#d2a8ff; }
@@ -123,105 +149,150 @@
     .address{ color:var(--green); font-size:12px; word-break:break-word; font-family:'JetBrains Mono', monospace; }
     .number{ color:#79c0ff; }
 
-    .input-line{ background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:8px 12px; margin:8px 0;
-      display:inline-flex; align-items:center; transition:border-color .2s; white-space:nowrap; }
+    /* Input styling */
+    .input-line{
+      background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:8px 12px; margin:8px 0;
+      display:inline-flex; align-items:center; transition:border-color .2s; white-space:nowrap;
+    }
     .input-line:hover{ border-color:var(--accent); }
     .input-line.focused{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(88,166,255,.1); }
     .input-line.disabled{ opacity:.5; cursor:not-allowed; }
     .input-prefix,.input-suffix{ color:#a5d6ff; font-size:12px; }
     .name-input{ background:none; border:none; color:#a5d6ff; font-family:inherit; font-size:12px; outline:none; width:140px; margin:0 4px; }
 
+    /* Mobile minimal input block */
     .mobile-only{ display:none; }
     .desktop-only{ display:inline-block; }
-    .mobile-shell{ background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:12px 16px; margin:8px 0;
-      display:flex; align-items:center; gap:6px; }
+    .mobile-shell{
+      background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:12px 16px; margin:8px 0;
+      display:flex; align-items:center; gap:6px;
+    }
     .quote{ color:#a5d6ff; }
     .name-input-mobile{ background:none; border:none; color:#a5d6ff; font-family:inherit; font-size:14px; outline:none; width:100%; }
-    .mobile-caret{ width:6px; height:1.1em; background:#a5d6ff; display:inline-block; border-radius:1px; animation:blink 1s steps(1,end) infinite; }
+    /* Flashing cursor for mobile */
+    .mobile-caret{
+      width:6px; height:1.1em; background:#a5d6ff; display:inline-block; border-radius:1px;
+      animation:blink 1s steps(1,end) infinite;
+    }
     .mobile-shell:focus-within .mobile-caret{ opacity:0; }
     @keyframes blink { 50% { opacity:0; } }
 
+    /* Preview section */
     .preview-comment{ margin-top:16px; padding:8px; background:var(--bg); border-radius:4px; font-size:12px; }
     .preview-comment .comment, .preview-comment .string{ font-size:12px; }
 
-    .action-section{ background:var(--bg); border-top:1px solid var(--border); padding:20px;
-      display:flex; align-items:center; justify-content:space-between; gap:16px; min-width:0; }
+    /* Action section */
+    .action-section{
+      background:var(--bg); border-top:1px solid var(--border); padding:20px;
+      display:flex; align-items:center; justify-content:space-between; gap:16px; min-width:0;
+    }
     .contract-info{ font-size:12px; min-width:0; flex:1 1 auto; }
     .contract-label{ color:var(--muted); margin-bottom:4px; }
     .contract-address-link{ color:var(--green); text-decoration:none; transition:opacity .2s; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .contract-address-link:hover{ opacity:.8; text-decoration:underline; }
 
-    .execute-button{ background:var(--pink); color:var(--bg); border:none; padding:10px 24px; border-radius:6px;
+    .execute-button{
+      background:var(--pink); color:var(--bg); border:none; padding:10px 24px; border-radius:6px;
       font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:all .2s;
-      text-transform:uppercase; letter-spacing:.5px; white-space:nowrap; flex:0 0 auto; }
+      text-transform:uppercase; letter-spacing:.5px; white-space:nowrap; flex:0 0 auto;
+    }
     .execute-button:hover:not(:disabled){ background:#ff8c73; transform:translateY(-1px); }
     .execute-button:active:not(:disabled){ transform:translateY(0); }
     .execute-button:disabled{ opacity:.6; cursor:not-allowed; }
 
+    /* Connected status */
     .wallet-status{ position:absolute; top:20px; right:20px; font-size:12px; color:var(--green); display:none; align-items:center; gap:6px; }
     .wallet-status.connected{ display:flex; }
     .status-dot{ width:8px; height:8px; background:var(--green); border-radius:50%; animation:pulse 2s infinite; }
     @keyframes pulse{ 0%{opacity:1} 50%{opacity:.5} 100%{opacity:1} }
 
+    /* Error state */
     .error-message{ background:#f85149; color:#fff; padding:8px 12px; border-radius:4px; font-size:12px; margin:8px 0; display:none; }
     .error-message.show{ display:block; }
 
-    .nft-container{ background:var(--panel); border:1px solid var(--border); border-radius:6px; width:100%;
-      aspect-ratio:1; margin:40px auto 20px; display:none; align-items:center; justify-content:center; }
+    /* NFT Preview - must remain square */
+    .nft-container{
+      background:var(--panel); border:1px solid var(--border); border-radius:6px; width:100%;
+      aspect-ratio:1; margin:40px auto 20px; display:none; align-items:center; justify-content:center;
+    }
     .nft-container.show{ display:flex; }
     .nft-code-editor{ position:relative; width:100%; padding:40px 0; }
-    .nft-line-numbers{ position:absolute; left:20px; top:50%; transform:translateY(-50%);
-      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none; }
+    .nft-line-numbers{
+      position:absolute; left:20px; top:50%; transform:translateY(-50%);
+      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none;
+    }
     .nft-code-content{ margin-left:70px; margin-right:40px; font-size:12px; line-height:20px; overflow-wrap:anywhere; word-break:break-word; }
 
+    /* Mint button */
     .mint-button-container{ text-align:center; margin-bottom:40px; display:none; }
     .mint-button-container.show{ display:block; }
-    .mint-button{ background:var(--pink); color:var(--bg); border:none; padding:10px 24px; border-radius:6px;
+    .mint-button{
+      background:var(--pink); color:var(--bg); border:none; padding:10px 24px; border-radius:6px;
       font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:all .2s;
-      text-transform:uppercase; letter-spacing:.5px; }
+      text-transform:uppercase; letter-spacing:.5px;
+    }
     .mint-button:hover:not(:disabled){ background:#ff8c73; transform:translateY(-1px); }
     .mint-button:disabled{ opacity:.6; cursor:not-allowed; }
-    .loading-spinner{ display:inline-block; width:14px; height:14px; border:2px solid var(--bg); border-radius:50%;
-      border-top-color:transparent; animation:spin .8s linear infinite; margin-left:8px; vertical-align:middle; }
+    .loading-spinner{ display:inline-block; width:14px; height:14px; border:2px solid var(--bg); border-radius:50%; border-top-color:transparent; animation:spin .8s linear infinite; margin-left:8px; vertical-align:middle; }
     @keyframes spin{ to{ transform:rotate(360deg); } }
 
+    /* Success message */
     .success-message{ background:#238636; color:#fff; padding:12px; border-radius:6px; font-size:12px; margin:20px 0; text-align:center; display:none; }
     .success-message.show{ display:block; }
     .success-message a{ color:var(--green); text-decoration:none; }
     .success-message a:hover{ text-decoration:underline; }
 
+    /* -------- Mobile fixes -------- */
     @media (max-width: 600px) {
       body { padding-top: calc(20px + env(safe-area-inset-top)); }
+
       .contract-container { aspect-ratio:auto; height:auto; overflow:visible; border-radius:0; }
+
       .code-editor { align-items:flex-start; padding:24px 0 16px; }
       .line-numbers { top:24px; transform:none; }
+
       .desktop-only{ display:none; }
       .mobile-only{ display:block; }
+
       .code-content { font-size:11px; }
       .name-input   { font-size:11px; width:120px; }
-      .action-section { display:grid; grid-template-columns: 1fr auto; align-items:center; gap:10px; }
+
+      /* Lock action row so the button cannot overflow */
+      .action-section {
+        display:grid;
+        grid-template-columns: 1fr auto;
+        align-items:center;
+        gap:10px;
+      }
       .contract-info { min-width:0; }
       .contract-address-link { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .execute-button { white-space:nowrap; font-size:12px; padding:8px 14px; max-width:45vw; }
+
       .network-badge { font-size:11px; padding:3px 10px; }
     }
+
+    /* Ensure NFT preview is always square */
     .nft-container { aspect-ratio: 1; }
   </style>
 </head>
 <body>
   <div class="widget-container">
+    <!-- Main Widget -->
     <div class="contract-container">
+      <!-- Header -->
       <div class="contract-header">
         <span class="file-icon">📄</span>
         <span class="filename">DeclarationOfTheDaves.sol</span>
         <span class="network-badge">Base Mainnet</span>
       </div>
 
+      <!-- Wallet Status -->
       <div class="wallet-status" id="walletStatus">
         <span class="status-dot"></span>
         <span id="walletAddress">Connected</span>
       </div>
 
+      <!-- Code Editor -->
       <div class="code-editor">
         <div class="line-numbers">
           <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div>
@@ -279,6 +350,7 @@
         </div>
       </div>
 
+      <!-- Action Section -->
       <div class="action-section">
         <div class="contract-info">
           <div class="contract-label">Contract</div>
@@ -291,6 +363,7 @@
       </div>
     </div>
 
+    <!-- NFT Preview (square) -->
     <div class="nft-container" id="nftPreview">
       <div class="nft-code-editor">
         <div class="nft-line-numbers">
@@ -301,10 +374,12 @@
       </div>
     </div>
 
+    <!-- Mint Button -->
     <div class="mint-button-container" id="mintButtonContainer">
       <button class="mint-button" id="mintButton" disabled title="Mint will be enabled after NFT contract is deployed">MINT AS NFT (0.001439 ETH)</button>
     </div>
 
+    <!-- Success Message -->
     <div class="success-message" id="successMessage">
       <div id="successText">NFT Minted Successfully!</div>
       <div style="margin-top:8px;">
@@ -323,12 +398,7 @@
         const a=document.createElement('script');
         a.src='https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js';
         a.onload=cb;
-        a.onerror=function(){
-          try {
-            const t=document.getElementById('errorText'), m=document.getElementById('errorMsg');
-            if(t&&m){ t.textContent='Failed to load Web3 library. Please refresh.'; m.classList.add('show'); }
-          } catch(_) {}
-        };
+        a.onerror=function(){ const m=document.getElementById('errorMsg'), t=document.getElementById('errorText'); if(m&&t){ t.textContent='Failed to load Web3 library. Please refresh.'; m.classList.add('show'); } };
         document.head.appendChild(a);
       };
       document.head.appendChild(s);
@@ -337,9 +407,10 @@
 
   <script>
     loadEthers(function () {
+      // --- Constants ---
       const CONTRACT_ADDRESS = '0xB0731E7ea189c169640Fd890E5dcE9811040D0eA';
-      const NFT_CONTRACT_ADDRESS = '';
-      const BASE_CHAIN_ID = '0x2105';
+      const NFT_CONTRACT_ADDRESS = ''; // fill when deployed
+      const BASE_CHAIN_ID = '0x2105'; // 8453 hex
       const BASE_CHAIN_ID_DEC = 8453;
 
       const CONTRACT_ABI = [
@@ -357,9 +428,11 @@
         "function MINT_PRICE() public view returns (uint256)"
       ];
 
+      // --- State ---
       let provider=null, signer=null, contract=null, nftContract=null;
       let connected=false, userAddress=null;
 
+      // --- Elements (desktop + mobile) ---
       const executeButton = document.getElementById('executeButton');
       const nameInputDesktop = document.getElementById('nameInput');
       const nameInputMobile  = document.getElementById('nameInputMobile');
@@ -382,7 +455,7 @@
       const activeInput = () => (isMobileLayout() ? nameInputMobile : nameInputDesktop);
 
       window.focusInput = function(){ const el = activeInput(); if (el && !el.disabled) el.focus(); };
-      function showError(m){ errorText.textContent=m; errorMsg.classList.add('show'); setTimeout(()=>errorMsg.classList.remove('show'),9000); }
+      function showError(m){ errorText.textContent=m; errorMsg.classList.add('show'); setTimeout(()=>errorMsg.classList.remove('show'),10000); }
       function clearMessages(){ errorMsg.classList.remove('show'); }
 
       function syncPreview(val){
@@ -390,10 +463,14 @@
         if (previewDesktop) previewDesktop.textContent = text;
         if (previewMobile)  previewMobile.textContent  = text;
       }
+
       function handleInput(e){
         const v = e.target.value.toLowerCase();
-        e.target.value = v; syncPreview(v); errorMsg.classList.remove('show');
+        e.target.value = v;
+        syncPreview(v);
+        errorMsg.classList.remove('show');
       }
+
       if (nameInputDesktop){
         nameInputDesktop.addEventListener('focus',()=>inputLineDesktop.classList.add('focused'));
         nameInputDesktop.addEventListener('blur', ()=>inputLineDesktop.classList.remove('focused'));
@@ -406,14 +483,14 @@
       }
 
       function extractDisplayName(full){ return full ? full.replace(/^i_am_/,'').replace(/_dave$/,'') : ''; }
-      function generateNFTPreview(daveName, signatureNumber, blockNumber, txHash, signerAddr){
-        const shortName = extractDisplayName(daveName);
+      function nftPreviewHTML(daveName, signatureNumber, blockNumber, txHash, signerAddr){
+        const short = extractDisplayName(daveName);
         const txLabel = txHash ? txHash : '0x...';
         return `<div class="comment">/**</div>
 <div class="comment"> * @title THE DECLARATION OF THE DAVES 001</div>
-<div class="comment"> * Contract: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA</div>
+<div class="comment"> * Contract: ${CONTRACT_ADDRESS}</div>
 <div class="comment"> * @notice THE BANKSY STAYS ON THE WALL</div>
-<div class="comment"> * Signed by: <span class="number">${shortName}_dave</span></div>
+<div class="comment"> * Signed by: <span class="number">${short}_dave</span></div>
 <div class="comment"> */</div>
 <br>
 <div class="comment">// Signature Number: <span class="number">#${signatureNumber}</span></div>
@@ -443,55 +520,58 @@
         }
       }
 
-      async function waitForAppKitReady(timeoutMs=12000){
-        const start = Date.now();
-        while (!window.__appkitReady && (Date.now() - start) < timeoutMs){
-          await new Promise(r=>setTimeout(r,150));
+      // Longer waits for iOS return-from-wallet timing
+      async function waitForAppKitReady(ms=15000){
+        const t0=Date.now(); while(!window.__appkitReady && Date.now()-t0 < ms){ await new Promise(r=>setTimeout(r,150)); }
+        if(!window.__appkitReady){ throw new Error(window.__appkitError?`AppKit init error: ${window.__appkitError}`:'Wallet chooser unavailable.'); }
+      }
+      async function waitForProviderFromAppKit(ms=25000){
+        const t0=Date.now();
+        while(Date.now()-t0 < ms){
+          if(window.daveModal?.getWalletProvider){ try{ const p=await window.daveModal.getWalletProvider(); if(p) return p; }catch(_){} }
+          if(window.ethereum) return window.ethereum;
+          if(window.ethereum?.providers?.length){ const p=window.ethereum.providers.find(p=>p&&typeof p.request==='function'); if(p) return p; }
+          await new Promise(r=>setTimeout(r,250));
         }
-        if (!window.__appkitReady){
-          const msg = window.__appkitError ? `AppKit init error: ${window.__appkitError}` : 'Wallet chooser unavailable.';
-          throw new Error(msg);
-        }
+        return null;
       }
 
-      async function waitForProviderFromAppKit(timeoutMs=15000){
-        const start = Date.now();
-        while ((Date.now() - start) < timeoutMs){
-          if (window.daveModal?.getWalletProvider){
-            try { const wc = await window.daveModal.getWalletProvider(); if (wc) return wc; } catch(_) {}
+      // getLogs in chunks (≤49k) to satisfy RPC limits
+      async function findFirstSignatureLog(addr, startBlock){
+        const latest = await provider.getBlockNumber();
+        const step = 49000; // under 50k limit
+        const iface = new ethers.utils.Interface(CONTRACT_ABI);
+        const topic0 = ethers.utils.id("DeclarationSigned(address,string,uint256,uint256)");
+        const topicAddr = ethers.utils.hexZeroPad(addr, 32);
+
+        for(let from = startBlock; from <= latest; from += (step + 1)){
+          const to = Math.min(from + step, latest);
+          try{
+            const logs = await provider.getLogs({ address: CONTRACT_ADDRESS, fromBlock: from, toBlock: to, topics: [topic0, topicAddr] });
+            if(logs.length) return { log: logs[0], iface };
+          }catch(e){
+            if(String(e?.message||'').toLowerCase().includes('block range')) continue;
           }
-          if (window.ethereum) return window.ethereum;
-          if (window.ethereum?.providers?.length){
-            const wc = window.ethereum.providers.find(p => p && typeof p.request === 'function');
-            if (wc) return wc;
-          }
-          await new Promise(r=>setTimeout(r,200));
         }
         return null;
       }
 
       async function fetchSignatureData(addr){
-        const helper = new ethers.Contract(
-          CONTRACT_ADDRESS,
-          ["function getInscriptionDetails() view returns (address,uint256,uint256)", "function signatureByAddress(address) view returns (string)"],
-          provider
-        );
+        const helper = new ethers.Contract(CONTRACT_ADDRESS, [
+          "function getInscriptionDetails() view returns (address,uint256,uint256)",
+          "function signatureByAddress(address) view returns (string)"
+        ], provider);
+
         const details = await helper.getInscriptionDetails();
         const startBlock = details[1].toNumber ? details[1].toNumber() : Number(details[1]);
 
-        const iface = new ethers.utils.Interface(CONTRACT_ABI);
-        const topic0 = ethers.utils.id("DeclarationSigned(address,string,uint256,uint256)");
-        const topicAddr = ethers.utils.hexZeroPad(addr, 32);
+        const found = await findFirstSignatureLog(addr, startBlock);
+        if(!found) return null;
 
-        const logs = await provider.getLogs({
-          address: CONTRACT_ADDRESS, fromBlock: startBlock, toBlock: 'latest',
-          topics: [topic0, topicAddr]
-        });
-        if (!logs.length) return null;
-
-        const log = logs[0];
+        const { log, iface } = found;
         const parsed = iface.parseLog(log);
         const name = await helper.signatureByAddress(addr);
+
         return {
           daveName: name,
           signatureNumber: parsed.args.signatureNumber.toString(),
@@ -502,32 +582,27 @@
 
       async function connectWallet(){
         clearMessages();
-        executeButton.disabled = true;
-        executeButton.textContent = 'CONNECTING...';
-
-        try {
-          const hasInjected = typeof window.ethereum !== 'undefined';
-          if (hasInjected) {
+        executeButton.disabled=true; executeButton.textContent='CONNECTING...';
+        try{
+          if(typeof window.ethereum !== 'undefined'){
             await ensureBase(window.ethereum);
             const accounts = await window.ethereum.request({ method:'eth_requestAccounts' });
-            if (!accounts || !accounts.length) throw new Error('No accounts');
+            if(!accounts || !accounts.length) throw new Error('No accounts');
             provider = new ethers.providers.Web3Provider(window.ethereum);
-          } else {
-            if (!isMobileUA()) throw new Error('No browser wallet detected. Install a wallet and reload.');
-            await waitForAppKitReady(12000);
-            if (!window.daveModal || typeof window.daveModal.open !== 'function') {
-              throw new Error('Wallet chooser unavailable (modal missing).');
-            }
+          }else{
+            if(!isMobileUA()) throw new Error('No browser wallet detected. Install a wallet and reload.');
+            await waitForAppKitReady();
+            if(!window.daveModal || typeof window.daveModal.open !== 'function') throw new Error('Wallet chooser unavailable (modal missing).');
             await window.daveModal.open();
-            const wcProvider = await waitForProviderFromAppKit(15000);
-            if (!wcProvider) throw new Error('No wallet selected or session not established.');
+            const wcProvider = await waitForProviderFromAppKit();
+            if(!wcProvider) throw new Error('No wallet selected or session not established.');
             await ensureBase(wcProvider);
-            try { await wcProvider.request({ method:'eth_requestAccounts' }); } catch(_) {}
+            try{ await wcProvider.request({ method:'eth_requestAccounts' }); }catch(_){}
             provider = new ethers.providers.Web3Provider(wcProvider, 'any');
           }
 
           const net = await provider.getNetwork();
-          if (Number(net.chainId) !== BASE_CHAIN_ID_DEC) throw new Error('Wrong network');
+          if(Number(net.chainId)!==BASE_CHAIN_ID_DEC) throw new Error('Wrong network');
 
           signer = provider.getSigner();
           userAddress = await signer.getAddress();
@@ -537,90 +612,79 @@
           walletAddress.textContent = `Connected: ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`;
           walletStatus.classList.add('connected');
 
-          const signed = await contract.hasSigned(userAddress);
-          if (signed){
-            const sd = await fetchSignatureData(userAddress);
-            if (sd){
-              nftContent.innerHTML = generateNFTPreview(sd.daveName, sd.signatureNumber, sd.blockNumber, sd.txHash, userAddress);
-              nftPreview.classList.add('show');
-              mintButtonContainer.classList.add('show');
-            } else {
-              showError('Could not retrieve signature data');
+          const already = await contract.hasSigned(userAddress);
+          if(already){
+            const sd = await fetchSignatureData(userAddress).catch(e=>{ console.error(e); showError('Could not retrieve signature data'); return null; });
+            if(sd){
+              nftContent.innerHTML = nftPreviewHTML(sd.daveName, sd.signatureNumber, sd.blockNumber, sd.txHash, userAddress);
+              nftPreview.classList.add('show'); mintButtonContainer.classList.add('show');
             }
-            if (nameInputDesktop) nameInputDesktop.disabled = true;
-            if (nameInputMobile)  nameInputMobile.disabled  = true;
-            if (inputLineDesktop) inputLineDesktop.classList.add('disabled');
-            if (inputLineMobile)  inputLineMobile.classList.add('disabled');
+            if(nameInputDesktop) nameInputDesktop.disabled=true;
+            if(nameInputMobile)  nameInputMobile.disabled=true;
+            if(inputLineDesktop) inputLineDesktop.classList.add('disabled');
+            if(inputLineMobile)  inputLineMobile.classList.add('disabled');
             document.querySelectorAll('.preview-comment .comment').forEach(el=>el.textContent='// ');
-            if (previewDesktop) previewDesktop.textContent = 'THE BANKSY STAYS ON THE WALL';
-            if (previewMobile)  previewMobile.textContent  = 'THE BANKSY STAYS ON THE WALL';
-            executeButton.textContent = 'ALREADY SIGNED';
-            executeButton.disabled = true;
-            connected = true;
-          } else {
-            connected = true;
-            executeButton.textContent = 'EXECUTE TRANSACTION';
-            executeButton.disabled = false;
+            if(previewDesktop) previewDesktop.textContent='THE BANKSY STAYS ON THE WALL';
+            if(previewMobile)  previewMobile.textContent='THE BANKSY STAYS ON THE WALL';
+            executeButton.textContent='ALREADY SIGNED'; executeButton.disabled=true;
+            connected=true;
+          }else{
+            connected=true; executeButton.textContent='EXECUTE TRANSACTION'; executeButton.disabled=false;
           }
-        } catch (e){
+        }catch(e){
           console.error(e);
-          showError(e?.message || 'Connection failed');
-          executeButton.textContent = 'CONNECT WALLET';
-          executeButton.disabled = false;
+          const msg = /5100/.test(String(e?.message)) ? 'Unsupported chains from selected login. Choose a wallet (Coinbase, MetaMask, Trust) via “All Wallets”.' : (e?.message || 'Connection failed');
+          showError(msg);
+          executeButton.textContent='CONNECT WALLET'; executeButton.disabled=false;
         }
       }
 
       async function signDeclaration(){
-        try {
+        try{
           clearMessages();
-          const inp = activeInput();
-          const name = (inp ? inp.value : '').trim().toLowerCase();
+          const inp=activeInput(); const name=(inp?inp.value:'').trim().toLowerCase();
+          if(!name){ showError('Please enter a name'); return; }
+          if(name.length>14){ showError('Name cannot exceed 14 characters'); return; }
+          if(!/^[a-z0-9-]+$/.test(name)){ showError('Only lowercase letters, numbers, and hyphens allowed'); return; }
 
-          if (!name){ showError('Please enter a name'); return; }
-          if (name.length > 14){ showError('Name cannot exceed 14 characters'); return; }
-          if (!/^[a-z0-9-]+$/.test(name)){ showError('Only lowercase letters, numbers, and hyphens allowed'); return; }
+          executeButton.disabled=true; executeButton.innerHTML='SIGNING<span class="loading-spinner"></span>';
+          const tx=await contract.cosignDeclaration(name);
+          executeButton.innerHTML='CONFIRMING<span class="loading-spinner"></span>';
+          const receipt=await tx.wait();
 
-          executeButton.disabled = true; executeButton.innerHTML = 'SIGNING<span class="loading-spinner"></span>';
-          const tx = await contract.cosignDeclaration(name);
-          executeButton.innerHTML = 'CONFIRMING<span class="loading-spinner"></span>';
-          const receipt = await tx.wait();
-
-          const iface = new ethers.utils.Interface(CONTRACT_ABI);
-          const ev = receipt.logs.map(l=>{ try{ return iface.parseLog(l) }catch{return null} }).find(x=>x && x.name==='DeclarationSigned');
+          const iface=new ethers.utils.Interface(CONTRACT_ABI);
+          const ev = receipt.logs.map(l=>{ try{ return iface.parseLog(l); }catch{return null;} }).find(x=>x&&x.name==='DeclarationSigned');
           const sigNum = ev ? ev.args.signatureNumber.toString() : 'N/A';
-          const fullName = `i_am_${name}_dave`;
+          const fullName=`i_am_${name}_dave`;
 
-          if (nameInputDesktop) nameInputDesktop.value='', nameInputDesktop.disabled = true;
-          if (nameInputMobile)  nameInputMobile.value='',  nameInputMobile.disabled  = true;
-          if (inputLineDesktop) inputLineDesktop.classList.add('disabled');
-          if (inputLineMobile)  inputLineMobile.classList.add('disabled');
+          if(nameInputDesktop){ nameInputDesktop.value=''; nameInputDesktop.disabled=true; }
+          if(nameInputMobile){ nameInputMobile.value=''; nameInputMobile.disabled=true; }
+          if(inputLineDesktop) inputLineDesktop.classList.add('disabled');
+          if(inputLineMobile)  inputLineMobile.classList.add('disabled');
           document.querySelectorAll('.preview-comment .comment').forEach(el=>el.textContent='// ');
-          if (previewDesktop) previewDesktop.textContent = 'THE BANKSY STAYS ON THE WALL';
-          if (previewMobile)  previewMobile.textContent  = 'THE BANKSY STAYS ON THE WALL';
-          executeButton.textContent = 'SIGNED'; executeButton.disabled = true;
+          if(previewDesktop) previewDesktop.textContent='THE BANKSY STAYS ON THE WALL';
+          if(previewMobile)  previewMobile.textContent='THE BANKSY STAYS ON THE WALL';
+          executeButton.textContent='SIGNED'; executeButton.disabled=true;
 
-          nftContent.innerHTML = generateNFTPreview(fullName, sigNum, receipt.blockNumber, tx.hash, userAddress);
-          nftPreview.classList.add('show');
-          mintButtonContainer.classList.add('show');
-
-          setTimeout(()=>{ if (window.parent !== window){ window.parent.postMessage({ type:'resize', height: document.body.scrollHeight }, '*'); } }, 100);
-        } catch (error){
-          console.error(error);
+          nftContent.innerHTML = nftPreviewHTML(fullName, sigNum, receipt.blockNumber, tx.hash, userAddress);
+          nftPreview.classList.add('show'); mintButtonContainer.classList.add('show');
+        }catch(e){
+          console.error(e);
           executeButton.disabled=false; executeButton.textContent='EXECUTE TRANSACTION';
-          if (error.code === 'ACTION_REJECTED' || error.code === 4001){ showError('Transaction cancelled'); }
-          else if (error?.message?.toLowerCase().includes('allowlist')){ showError('Only allowlisted addresses can sign during this period'); }
-          else { showError('Transaction failed. Please try again.'); }
+          if(e.code==='ACTION_REJECTED'||e.code===4001) showError('Transaction cancelled');
+          else if(String(e?.message||'').toLowerCase().includes('allowlist')) showError('Only allowlisted addresses can sign during this period');
+          else showError('Transaction failed. Please try again.');
         }
       }
 
       function mintNFT(){ showError('NFT contract not deployed yet'); }
 
-      executeButton.addEventListener('click', async ()=>{ if (!connected) await connectWallet(); else await signDeclaration(); });
+      executeButton.addEventListener('click', async ()=>{ if(!connected) await connectWallet(); else await signDeclaration(); });
       mintButton.addEventListener('click', mintNFT);
 
       [nameInputDesktop, nameInputMobile].forEach(inp=>{
-        if (!inp) return;
-        inp.addEventListener('keypress', async (e)=>{ if (e.key==='Enter' && connected && !inp.disabled){ await signDeclaration(); } });
+        if(!inp) return;
+        inp.addEventListener('keypress', async (e)=>{ if(e.key==='Enter' && connected && !inp.disabled){ await signDeclaration(); } });
       });
 
       if (window.ethereum){
