@@ -24,44 +24,24 @@
 
     async function loadAppKitESM() {
       const sources = [
-        // Primary: esm.sh bundled ESM (Safari/WebKit friendly)
-        {
-          appkit:  'https://esm.sh/@reown/appkit@1?bundle',
-          adapter: 'https://esm.sh/@reown/appkit-adapter-ethers5@1?bundle',
-          label: 'esm.sh'
-        },
-        // Fallback 1: jsDelivr ESM wrapper
-        {
-          appkit:  'https://cdn.jsdelivr.net/npm/@reown/appkit@1/+esm',
-          adapter: 'https://cdn.jsdelivr.net/npm/@reown/appkit-adapter-ethers5@1/+esm',
-          label: 'jsdelivr +esm'
-        },
-        // Fallback 2: unpkg ?module ESM wrapper
-        {
-          appkit:  'https://unpkg.com/@reown/appkit@1/dist/index.js?module',
-          adapter: 'https://unpkg.com/@reown/appkit-adapter-ethers5@1/dist/index.js?module',
-          label: 'unpkg ?module'
-        }
+        { appkit:'https://esm.sh/@reown/appkit@1?bundle',
+          adapter:'https://esm.sh/@reown/appkit-adapter-ethers5@1?bundle', label:'esm.sh' },
+        { appkit:'https://cdn.jsdelivr.net/npm/@reown/appkit@1/+esm',
+          adapter:'https://cdn.jsdelivr.net/npm/@reown/appkit-adapter-ethers5@1/+esm', label:'jsdelivr +esm' },
+        { appkit:'https://unpkg.com/@reown/appkit@1/dist/index.js?module',
+          adapter:'https://unpkg.com/@reown/appkit-adapter-ethers5@1/dist/index.js?module', label:'unpkg ?module' }
       ];
       let lastErr = null;
-
       for (const src of sources) {
         try {
           const appkitMod  = await import(src.appkit);
           const adapterMod = await import(src.adapter);
-
-          // Try named export first; otherwise try default namespace
           const createAppKit = appkitMod.createAppKit || (appkitMod.default && appkitMod.default.createAppKit) || appkitMod.default || appkitMod;
           const Ethers5Adapter = adapterMod.Ethers5Adapter || (adapterMod.default && adapterMod.default.Ethers5Adapter) || adapterMod.default || adapterMod;
-
           if (typeof createAppKit !== 'function') throw new Error(`createAppKit not found via ${src.label}`);
           if (typeof Ethers5Adapter !== 'function') throw new Error(`Ethers5Adapter not found via ${src.label}`);
-
-          return { createAppKit, Ethers5Adapter, source: src.label };
-        } catch (e) {
-          lastErr = e;
-          console.error(`AppKit import failed via ${src.label}`, e);
-        }
+          return { createAppKit, Ethers5Adapter };
+        } catch (e) { lastErr = e; console.error(`AppKit import failed`, src.label, e); }
       }
       throw lastErr || new Error('Failed to import AppKit');
     }
@@ -70,7 +50,7 @@
       try {
         const { createAppKit, Ethers5Adapter } = await loadAppKitESM();
 
-        // Inline Base network to avoid extra subpackage imports
+        // Inline Base network
         const base = {
           id: 8453,
           name: 'Base',
@@ -118,36 +98,22 @@
     }
     .widget-container { max-width:600px; margin:0 auto; width:100%; }
 
-    /* Main contract container (desktop/tablet keeps square look) */
-    .contract-container {
-      background:var(--panel); border:1px solid var(--border); border-radius:6px; width:100%;
-      aspect-ratio:1; overflow:hidden; display:flex; flex-direction:column;
-    }
+    .contract-container { background:var(--panel); border:1px solid var(--border); border-radius:6px; width:100%;
+      aspect-ratio:1; overflow:hidden; display:flex; flex-direction:column; }
 
-    .contract-header {
-      background:var(--bg); border-bottom:1px solid var(--border); padding:12px 20px;
-      display:flex; align-items:center; gap:8px; min-width:0;
-    }
+    .contract-header { background:var(--bg); border-bottom:1px solid var(--border); padding:12px 20px;
+      display:flex; align-items:center; gap:8px; min-width:0; }
     .file-icon{ color:var(--green); flex:0 0 auto; }
-    .filename{
-      color:var(--white); font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;
-    }
-    .network-badge{
-      margin-left:auto; background:var(--blue); color:#fff; padding:4px 12px; border-radius:20px; font-size:12px;
-      white-space:nowrap; flex:0 0 auto; align-self:center; line-height:1;
-    }
+    .filename{ color:var(--white); font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+    .network-badge{ margin-left:auto; background:var(--blue); color:#fff; padding:4px 12px; border-radius:20px; font-size:12px;
+      white-space:nowrap; flex:0 0 auto; align-self:center; line-height:1; }
 
     .code-editor{ flex:1; position:relative; display:flex; align-items:center; padding:40px 0; }
-    .line-numbers{
-      position:absolute; left:20px; top:50%; transform:translateY(-50%);
-      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none;
-    }
-    .code-content{
-      margin-left:70px; margin-right:40px; font-size:12px; line-height:20px; width:calc(100% - 110px);
-      overflow-wrap:anywhere; word-break:break-word;
-    }
+    .line-numbers{ position:absolute; left:20px; top:50%; transform:translateY(-50%);
+      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none; }
+    .code-content{ margin-left:70px; margin-right:40px; font-size:12px; line-height:20px; width:calc(100% - 110px);
+      overflow-wrap:anywhere; word-break:break-word; }
 
-    /* Syntax highlighting */
     .comment{ color:var(--muted); font-style:italic; }
     .keyword{ color:#ff7b72; }
     .function-name{ color:#d2a8ff; }
@@ -157,150 +123,105 @@
     .address{ color:var(--green); font-size:12px; word-break:break-word; font-family:'JetBrains Mono', monospace; }
     .number{ color:#79c0ff; }
 
-    /* Input styling */
-    .input-line{
-      background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:8px 12px; margin:8px 0;
-      display:inline-flex; align-items:center; transition:border-color .2s; white-space:nowrap;
-    }
+    .input-line{ background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:8px 12px; margin:8px 0;
+      display:inline-flex; align-items:center; transition:border-color .2s; white-space:nowrap; }
     .input-line:hover{ border-color:var(--accent); }
     .input-line.focused{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(88,166,255,.1); }
     .input-line.disabled{ opacity:.5; cursor:not-allowed; }
     .input-prefix,.input-suffix{ color:#a5d6ff; font-size:12px; }
     .name-input{ background:none; border:none; color:#a5d6ff; font-family:inherit; font-size:12px; outline:none; width:140px; margin:0 4px; }
 
-    /* Mobile minimal input block */
     .mobile-only{ display:none; }
     .desktop-only{ display:inline-block; }
-    .mobile-shell{
-      background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:12px 16px; margin:8px 0;
-      display:flex; align-items:center; gap:6px;
-    }
+    .mobile-shell{ background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:12px 16px; margin:8px 0;
+      display:flex; align-items:center; gap:6px; }
     .quote{ color:#a5d6ff; }
     .name-input-mobile{ background:none; border:none; color:#a5d6ff; font-family:inherit; font-size:14px; outline:none; width:100%; }
-    /* Flashing cursor for mobile */
-    .mobile-caret{
-      width:6px; height:1.1em; background:#a5d6ff; display:inline-block; border-radius:1px;
-      animation:blink 1s steps(1,end) infinite;
-    }
+    .mobile-caret{ width:6px; height:1.1em; background:#a5d6ff; display:inline-block; border-radius:1px; animation:blink 1s steps(1,end) infinite; }
     .mobile-shell:focus-within .mobile-caret{ opacity:0; }
     @keyframes blink { 50% { opacity:0; } }
 
-    /* Preview section */
     .preview-comment{ margin-top:16px; padding:8px; background:var(--bg); border-radius:4px; font-size:12px; }
     .preview-comment .comment, .preview-comment .string{ font-size:12px; }
 
-    /* Action section */
-    .action-section{
-      background:var(--bg); border-top:1px solid var(--border); padding:20px;
-      display:flex; align-items:center; justify-content:space-between; gap:16px; min-width:0;
-    }
+    .action-section{ background:var(--bg); border-top:1px solid var(--border); padding:20px;
+      display:flex; align-items:center; justify-content:space-between; gap:16px; min-width:0; }
     .contract-info{ font-size:12px; min-width:0; flex:1 1 auto; }
     .contract-label{ color:var(--muted); margin-bottom:4px; }
     .contract-address-link{ color:var(--green); text-decoration:none; transition:opacity .2s; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .contract-address-link:hover{ opacity:.8; text-decoration:underline; }
 
-    .execute-button{
-      background:var(--pink); color:var(--bg); border:none; padding:10px 24px; border-radius:6px;
+    .execute-button{ background:var(--pink); color:var(--bg); border:none; padding:10px 24px; border-radius:6px;
       font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:all .2s;
-      text-transform:uppercase; letter-spacing:.5px; white-space:nowrap; flex:0 0 auto;
-    }
+      text-transform:uppercase; letter-spacing:.5px; white-space:nowrap; flex:0 0 auto; }
     .execute-button:hover:not(:disabled){ background:#ff8c73; transform:translateY(-1px); }
     .execute-button:active:not(:disabled){ transform:translateY(0); }
     .execute-button:disabled{ opacity:.6; cursor:not-allowed; }
 
-    /* Connected status */
     .wallet-status{ position:absolute; top:20px; right:20px; font-size:12px; color:var(--green); display:none; align-items:center; gap:6px; }
     .wallet-status.connected{ display:flex; }
     .status-dot{ width:8px; height:8px; background:var(--green); border-radius:50%; animation:pulse 2s infinite; }
     @keyframes pulse{ 0%{opacity:1} 50%{opacity:.5} 100%{opacity:1} }
 
-    /* Error state */
     .error-message{ background:#f85149; color:#fff; padding:8px 12px; border-radius:4px; font-size:12px; margin:8px 0; display:none; }
     .error-message.show{ display:block; }
 
-    /* NFT Preview - must remain square */
-    .nft-container{
-      background:var(--panel); border:1px solid var(--border); border-radius:6px; width:100%;
-      aspect-ratio:1; margin:40px auto 20px; display:none; align-items:center; justify-content:center;
-    }
+    .nft-container{ background:var(--panel); border:1px solid var(--border); border-radius:6px; width:100%;
+      aspect-ratio:1; margin:40px auto 20px; display:none; align-items:center; justify-content:center; }
     .nft-container.show{ display:flex; }
     .nft-code-editor{ position:relative; width:100%; padding:40px 0; }
-    .nft-line-numbers{
-      position:absolute; left:20px; top:50%; transform:translateY(-50%);
-      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none;
-    }
+    .nft-line-numbers{ position:absolute; left:20px; top:50%; transform:translateY(-50%);
+      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none; }
     .nft-code-content{ margin-left:70px; margin-right:40px; font-size:12px; line-height:20px; overflow-wrap:anywhere; word-break:break-word; }
 
-    /* Mint button */
     .mint-button-container{ text-align:center; margin-bottom:40px; display:none; }
     .mint-button-container.show{ display:block; }
-    .mint-button{
-      background:var(--pink); color:var(--bg); border:none; padding:10px 24px; border-radius:6px;
+    .mint-button{ background:var(--pink); color:var(--bg); border:none; padding:10px 24px; border-radius:6px;
       font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:all .2s;
-      text-transform:uppercase; letter-spacing:.5px;
-    }
+      text-transform:uppercase; letter-spacing:.5px; }
     .mint-button:hover:not(:disabled){ background:#ff8c73; transform:translateY(-1px); }
     .mint-button:disabled{ opacity:.6; cursor:not-allowed; }
-    .loading-spinner{ display:inline-block; width:14px; height:14px; border:2px solid var(--bg); border-radius:50%; border-top-color:transparent; animation:spin .8s linear infinite; margin-left:8px; vertical-align:middle; }
+    .loading-spinner{ display:inline-block; width:14px; height:14px; border:2px solid var(--bg); border-radius:50%;
+      border-top-color:transparent; animation:spin .8s linear infinite; margin-left:8px; vertical-align:middle; }
     @keyframes spin{ to{ transform:rotate(360deg); } }
 
-    /* Success message */
     .success-message{ background:#238636; color:#fff; padding:12px; border-radius:6px; font-size:12px; margin:20px 0; text-align:center; display:none; }
     .success-message.show{ display:block; }
     .success-message a{ color:var(--green); text-decoration:none; }
     .success-message a:hover{ text-decoration:underline; }
 
-    /* -------- Mobile fixes -------- */
     @media (max-width: 600px) {
       body { padding-top: calc(20px + env(safe-area-inset-top)); }
-
       .contract-container { aspect-ratio:auto; height:auto; overflow:visible; border-radius:0; }
-
       .code-editor { align-items:flex-start; padding:24px 0 16px; }
       .line-numbers { top:24px; transform:none; }
-
       .desktop-only{ display:none; }
       .mobile-only{ display:block; }
-
       .code-content { font-size:11px; }
       .name-input   { font-size:11px; width:120px; }
-
-      /* Lock action row so the button cannot overflow */
-      .action-section {
-        display:grid;
-        grid-template-columns: 1fr auto;
-        align-items:center;
-        gap:10px;
-      }
+      .action-section { display:grid; grid-template-columns: 1fr auto; align-items:center; gap:10px; }
       .contract-info { min-width:0; }
       .contract-address-link { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .execute-button { white-space:nowrap; font-size:12px; padding:8px 14px; max-width:45vw; }
-
       .network-badge { font-size:11px; padding:3px 10px; }
     }
-
-    /* Ensure NFT preview is always square */
     .nft-container { aspect-ratio: 1; }
   </style>
 </head>
 <body>
   <div class="widget-container">
-    <!-- Main Widget -->
     <div class="contract-container">
-      <!-- Header -->
       <div class="contract-header">
         <span class="file-icon">📄</span>
         <span class="filename">DeclarationOfTheDaves.sol</span>
         <span class="network-badge">Base Mainnet</span>
       </div>
 
-      <!-- Wallet Status -->
       <div class="wallet-status" id="walletStatus">
         <span class="status-dot"></span>
         <span id="walletAddress">Connected</span>
       </div>
 
-      <!-- Code Editor -->
       <div class="code-editor">
         <div class="line-numbers">
           <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div>
@@ -358,7 +279,6 @@
         </div>
       </div>
 
-      <!-- Action Section -->
       <div class="action-section">
         <div class="contract-info">
           <div class="contract-label">Contract</div>
@@ -371,7 +291,6 @@
       </div>
     </div>
 
-    <!-- NFT Preview (square) -->
     <div class="nft-container" id="nftPreview">
       <div class="nft-code-editor">
         <div class="nft-line-numbers">
@@ -382,12 +301,10 @@
       </div>
     </div>
 
-    <!-- Mint Button -->
     <div class="mint-button-container" id="mintButtonContainer">
       <button class="mint-button" id="mintButton" disabled title="Mint will be enabled after NFT contract is deployed">MINT AS NFT (0.001439 ETH)</button>
     </div>
 
-    <!-- Success Message -->
     <div class="success-message" id="successMessage">
       <div id="successText">NFT Minted Successfully!</div>
       <div style="margin-top:8px;">
@@ -406,7 +323,12 @@
         const a=document.createElement('script');
         a.src='https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js';
         a.onload=cb;
-        a.onerror=function(){ showError('Failed to load Web3 library. Please refresh.'); };
+        a.onerror=function(){
+          try {
+            const t=document.getElementById('errorText'), m=document.getElementById('errorMsg');
+            if(t&&m){ t.textContent='Failed to load Web3 library. Please refresh.'; m.classList.add('show'); }
+          } catch(_) {}
+        };
         document.head.appendChild(a);
       };
       document.head.appendChild(s);
@@ -415,10 +337,9 @@
 
   <script>
     loadEthers(function () {
-      // --- Constants ---
       const CONTRACT_ADDRESS = '0xB0731E7ea189c169640Fd890E5dcE9811040D0eA';
-      const NFT_CONTRACT_ADDRESS = ''; // fill when deployed
-      const BASE_CHAIN_ID = '0x2105'; // 8453 hex
+      const NFT_CONTRACT_ADDRESS = '';
+      const BASE_CHAIN_ID = '0x2105';
       const BASE_CHAIN_ID_DEC = 8453;
 
       const CONTRACT_ABI = [
@@ -436,11 +357,9 @@
         "function MINT_PRICE() public view returns (uint256)"
       ];
 
-      // --- State ---
       let provider=null, signer=null, contract=null, nftContract=null;
       let connected=false, userAddress=null;
 
-      // --- Elements (desktop + mobile) ---
       const executeButton = document.getElementById('executeButton');
       const nameInputDesktop = document.getElementById('nameInput');
       const nameInputMobile  = document.getElementById('nameInputMobile');
@@ -457,7 +376,6 @@
       const nftContent = document.getElementById('nftContent');
       const mintButtonContainer = document.getElementById('mintButtonContainer');
       const mintButton = document.getElementById('mintButton');
-      const successMessage = document.getElementById('successMessage');
 
       const isMobileUA = () => /android|iphone|ipad|ipod|iemobile|opera mini/i.test(navigator.userAgent || '');
       const isMobileLayout = () => window.matchMedia('(max-width: 600px)').matches;
@@ -472,14 +390,10 @@
         if (previewDesktop) previewDesktop.textContent = text;
         if (previewMobile)  previewMobile.textContent  = text;
       }
-
       function handleInput(e){
         const v = e.target.value.toLowerCase();
-        e.target.value = v;
-        syncPreview(v);
-        errorMsg.classList.remove('show');
+        e.target.value = v; syncPreview(v); errorMsg.classList.remove('show');
       }
-
       if (nameInputDesktop){
         nameInputDesktop.addEventListener('focus',()=>inputLineDesktop.classList.add('focused'));
         nameInputDesktop.addEventListener('blur', ()=>inputLineDesktop.classList.remove('focused'));
@@ -492,7 +406,6 @@
       }
 
       function extractDisplayName(full){ return full ? full.replace(/^i_am_/,'').replace(/_dave$/,'') : ''; }
-
       function generateNFTPreview(daveName, signatureNumber, blockNumber, txHash, signerAddr){
         const shortName = extractDisplayName(daveName);
         const txLabel = txHash ? txHash : '0x...';
@@ -530,7 +443,6 @@
         }
       }
 
-      // Wait for AppKit readiness (extended for iOS)
       async function waitForAppKitReady(timeoutMs=12000){
         const start = Date.now();
         while (!window.__appkitReady && (Date.now() - start) < timeoutMs){
@@ -542,15 +454,11 @@
         }
       }
 
-      // After opening the modal, poll for an EIP-1193 provider
       async function waitForProviderFromAppKit(timeoutMs=15000){
         const start = Date.now();
         while ((Date.now() - start) < timeoutMs){
           if (window.daveModal?.getWalletProvider){
-            try {
-              const wc = await window.daveModal.getWalletProvider();
-              if (wc) return wc;
-            } catch(_) {}
+            try { const wc = await window.daveModal.getWalletProvider(); if (wc) return wc; } catch(_) {}
           }
           if (window.ethereum) return window.ethereum;
           if (window.ethereum?.providers?.length){
@@ -562,7 +470,6 @@
         return null;
       }
 
-      // Query the user's DeclarationSigned event without looping all signatures
       async function fetchSignatureData(addr){
         const helper = new ethers.Contract(
           CONTRACT_ADDRESS,
@@ -593,7 +500,6 @@
         };
       }
 
-      // Hybrid connect flow
       async function connectWallet(){
         clearMessages();
         executeButton.disabled = true;
@@ -635,10 +541,9 @@
           if (signed){
             const sd = await fetchSignatureData(userAddress);
             if (sd){
-              const html = generateNFTPreview(sd.daveName, sd.signatureNumber, sd.blockNumber, sd.txHash, userAddress);
-              document.getElementById('nftContent').innerHTML = html;
+              nftContent.innerHTML = generateNFTPreview(sd.daveName, sd.signatureNumber, sd.blockNumber, sd.txHash, userAddress);
               nftPreview.classList.add('show');
-              mintButtonContainer.classList.add('show'); // still disabled until NFT deployed
+              mintButtonContainer.classList.add('show');
             } else {
               showError('Could not retrieve signature data');
             }
@@ -694,8 +599,7 @@
           if (previewMobile)  previewMobile.textContent  = 'THE BANKSY STAYS ON THE WALL';
           executeButton.textContent = 'SIGNED'; executeButton.disabled = true;
 
-          document.getElementById('nftContent').innerHTML =
-            generateNFTPreview(fullName, sigNum, receipt.blockNumber, tx.hash, await signer.getAddress());
+          nftContent.innerHTML = generateNFTPreview(fullName, sigNum, receipt.blockNumber, tx.hash, userAddress);
           nftPreview.classList.add('show');
           mintButtonContainer.classList.add('show');
 
@@ -709,24 +613,31 @@
         }
       }
 
-      function mintNFT(){ showError('NFT contract not deployed yet'); } // placeholder
+      function mintNFT(){ showError('NFT contract not deployed yet'); }
 
       executeButton.addEventListener('click', async ()=>{ if (!connected) await connectWallet(); else await signDeclaration(); });
       mintButton.addEventListener('click', mintNFT);
 
-      // Enter-to-sign for both inputs
       [nameInputDesktop, nameInputMobile].forEach(inp=>{
         if (!inp) return;
         inp.addEventListener('keypress', async (e)=>{ if (e.key==='Enter' && connected && !inp.disabled){ await signDeclaration(); } });
       });
 
-      // Listen for account/network changes on injected provider if present
       if (window.ethereum){
-        window.ethereum.on('accountsChanged', (accounts)=>{ if (!accounts.length) location.reload(); else if (connected && accounts[0].toLowerCase() !== (await signer.getAddress()).toLowerCase()) location.reload(); });
-        window.ethereum.on('chainChanged', (id)=>{ if (id !== BASE_CHAIN_ID){ showError('Please switch back to Base network'); executeButton.textContent='CONNECT WALLET'; executeButton.disabled=false; connected=false; } });
+        window.ethereum.on('accountsChanged', (accounts)=>{
+          if (!accounts.length) location.reload();
+          else if (connected && accounts[0].toLowerCase() !== (userAddress||'').toLowerCase()) location.reload();
+        });
+        window.ethereum.on('chainChanged', (id)=>{
+          if (id !== BASE_CHAIN_ID){
+            showError('Please switch back to Base network');
+            executeButton.textContent='CONNECT WALLET';
+            executeButton.disabled=false;
+            connected=false;
+          }
+        });
       }
 
-      // autofocus whichever is visible
       const initial = activeInput(); if (initial) initial.focus();
     });
   </script>
