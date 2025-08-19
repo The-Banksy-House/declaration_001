@@ -3,136 +3,206 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Declaration of the Daves</title>
+  <title>Declaration of the Daves - Sign the Contract</title>
+
+  <!-- Allow embedding in iframes -->
+  <meta http-equiv="X-Frame-Options" content="ALLOWALL">
+
+  <!-- Font -->
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
   <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #0d1117;
-      color: #c9d1d9;
-      font-family: "Courier New", monospace;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      background: #0d1117; color: #c9d1d9; font-family: 'JetBrains Mono', monospace;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
     }
-    .editor {
-      background: #161b22;
-      padding: 1rem;
-      margin: 1rem;
-      border-radius: 8px;
-      max-width: 95%;
-      width: 800px;
-      box-sizing: border-box;
-      overflow-x: auto;
-      white-space: pre-wrap;
-      word-break: break-word;
+    .widget-container { max-width: 600px; margin: 0 auto; width: 100%; }
+
+    /* Main contract container - square format */
+    .contract-container {
+      background: #161b22; border: 1px solid #30363d; border-radius: 6px; width: 100%;
+      aspect-ratio: 1; overflow: hidden; display: flex; flex-direction: column;
     }
-    .line-num { color: #484f58; margin-right: 1rem; }
-    .comment { color: #8b949e; }
+    .contract-header {
+      background: #0d1117; border-bottom: 1px solid #30363d; padding: 12px 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .file-icon { color: #7ee787; }
+    .filename { color: #f0f6fc; font-size: 14px; }
+    .network-badge { margin-left: auto; background: #1f6feb; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; }
+
+    .code-editor { flex: 1; position: relative; display: flex; align-items: center; padding: 40px 0; }
+    .line-numbers {
+      position: absolute; left: 20px; top: 50%; transform: translateY(-50%);
+      width: 30px; text-align: right; color: #484f58; font-size: 12px; line-height: 20px; user-select: none;
+    }
+    .code-content {
+      margin-left: 70px; margin-right: 40px; font-size: 12px; line-height: 20px; width: calc(100% - 110px);
+      /* mobile overflow guards */
+      overflow-wrap: anywhere; word-break: break-word;
+    }
+
+    /* Syntax highlighting */
+    .comment { color: #8b949e; font-style: italic; }
     .keyword { color: #ff7b72; }
-    .address { color: #7ee787; }
+    .function-name { color: #d2a8ff; }
+    .type { color: #79c0ff; }
+    .string { color: #a5d6ff; }
+    .parameter { color: #ffa657; }
+    .address { color: #7ee787; font-size: 12px; word-break: break-word; font-family: 'JetBrains Mono', monospace; }
     .number { color: #79c0ff; }
-    .btn {
-      background: #238636;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      font-family: inherit;
-      cursor: pointer;
-      border-radius: 6px;
-      margin-top: 10px;
+
+    /* Input styling */
+    .input-line { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 8px 12px; margin: 8px 0;
+      display: inline-flex; align-items: center; transition: border-color 0.2s; white-space: nowrap; }
+    .input-line:hover { border-color: #58a6ff; }
+    .input-line.focused { border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88,166,255,.1); }
+    .input-line.disabled { opacity: .5; cursor: not-allowed; }
+    .input-prefix, .input-suffix { color: #a5d6ff; font-size: 12px; }
+    .name-input { background: none; border: none; color: #a5d6ff; font-family: inherit; font-size: 12px; outline: none; width: 140px; margin: 0 4px; }
+
+    /* Preview section */
+    .preview-comment { margin-top: 16px; padding: 8px; background: #0d1117; border-radius: 4px; font-size: 12px; }
+    .preview-comment .comment, .preview-comment .string { font-size: 12px; }
+
+    /* Action section */
+    .action-section {
+      background: #0d1117; border-top: 1px solid #30363d; padding: 20px;
+      display: flex; align-items: center; justify-content: space-between;
     }
-    .btn:disabled {
-      background: #30363d;
-      cursor: not-allowed;
+    .contract-info { font-size: 12px; }
+    .contract-label { color: #8b949e; margin-bottom: 4px; }
+    .contract-address-link { color: #7ee787; text-decoration: none; transition: opacity .2s; }
+    .contract-address-link:hover { opacity: .8; text-decoration: underline; }
+    .execute-button {
+      background: #f78166; color: #0d1117; border: none; padding: 10px 24px; border-radius: 6px;
+      font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s;
+      text-transform: uppercase; letter-spacing: .5px;
     }
-    .preview {
-      background: #0d1117;
-      padding: 1rem;
-      margin: 1rem;
-      border-radius: 8px;
-      max-width: 95%;
-      width: 800px;
-      text-align: center;
+    .execute-button:hover:not(:disabled){ background:#ff8c73; transform: translateY(-1px); }
+    .execute-button:active:not(:disabled){ transform: translateY(0); }
+    .execute-button:disabled{ opacity:.6; cursor:not-allowed; }
+
+    /* Connected status */
+    .wallet-status { position: absolute; top: 20px; right: 20px; font-size: 12px; color: #7ee787; display: none; align-items: center; gap: 6px; }
+    .wallet-status.connected { display: flex; }
+    .status-dot { width: 8px; height: 8px; background: #7ee787; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%{opacity:1} 50%{opacity:.5} 100%{opacity:1} }
+
+    /* Error state */
+    .error-message { background:#f85149; color:#fff; padding:8px 12px; border-radius:4px; font-size:12px; margin:8px 0; display:none; }
+    .error-message.show { display:block; }
+
+    /* NFT Preview - Square format */
+    .nft-container {
+      background:#161b22; border:1px solid #30363d; border-radius:6px; width:100%; aspect-ratio:1;
+      margin:40px auto 20px; display:none; align-items:center; justify-content:center;
     }
-    svg {
-      max-width: 100%;
-      height: auto;
+    .nft-container.show { display:flex; }
+    .nft-code-editor { position:relative; width:100%; padding:40px 0; }
+    .nft-line-numbers {
+      position:absolute; left:20px; top:50%; transform: translateY(-50%);
+      width:30px; text-align:right; color:#484f58; font-size:12px; line-height:20px; user-select:none;
+    }
+    .nft-code-content { margin-left:70px; margin-right:40px; font-size:12px; line-height:20px; overflow-wrap:anywhere; word-break:break-word; }
+
+    /* Mint button */
+    .mint-button-container { text-align:center; margin-bottom:40px; display:none; }
+    .mint-button-container.show { display:block; }
+    .mint-button {
+      background:#f78166; color:#0d1117; border:none; padding:10px 24px; border-radius:6px;
+      font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:all .2s;
+      text-transform:uppercase; letter-spacing:.5px;
+    }
+    .mint-button:hover:not(:disabled){ background:#ff8c73; transform: translateY(-1px); }
+    .mint-button:disabled{ opacity:.6; cursor:not-allowed; }
+    .loading-spinner { display:inline-block; width:14px; height:14px; border:2px solid #0d1117; border-radius:50%; border-top-color:transparent; animation: spin .8s linear infinite; margin-left:8px; vertical-align:middle; }
+    @keyframes spin { to{ transform: rotate(360deg); } }
+
+    /* Success message */
+    .success-message { background:#238636; color:#fff; padding:12px; border-radius:6px; font-size:12px; margin:20px 0; text-align:center; display:none; }
+    .success-message.show { display:block; }
+    .success-message a { color:#7ee787; text-decoration:none; }
+    .success-message a:hover { text-decoration:underline; }
+
+    @media (max-width: 600px) {
+      .contract-container { border-radius: 0; }
+      .code-content { font-size: 11px; }
+      .name-input { font-size: 11px; width: 120px; }
+      .execute-button { font-size: 12px; padding: 8px 20px; }
     }
   </style>
 </head>
 <body>
-  <h2>Declaration of the Daves</h2>
+  <div class="widget-container">
+    <!-- Main Widget -->
+    <div class="contract-container">
+      <!-- Header -->
+      <div class="contract-header">
+        <span class="file-icon">📄</span>
+        <span class="filename">DeclarationOfTheDaves.sol</span>
+        <span class="network-badge">Base Mainnet</span>
+      </div>
 
-  <!-- Fake solidity editor -->
-  <div class="editor" id="editor">
-    <div><span class="line-num">1</span><span class="comment">/**</span></div>
-    <div><span class="line-num">2</span><span class="comment"> * Sign the declaration to mint your proof.</span></div>
-    <div><span class="line-num">3</span><span class="comment"> */</span></div>
-    <div><span class="line-num">4</span><span class="keyword">function</span> sign() public {}</div>
-    <div><span class="line-num">5</span><span class="keyword">function</span> hasSigned(address) public view returns(bool) {}</div>
-    <div><span class="line-num">6</span><span class="keyword">function</span> signatureByAddress(address) public view returns(string) {}</div>
-  </div>
+      <!-- Wallet Status -->
+      <div class="wallet-status" id="walletStatus">
+        <span class="status-dot"></span>
+        <span id="walletAddress">Connected</span>
+      </div>
 
-  <!-- NFT preview -->
-  <div class="preview">
-    <h3>NFT Preview</h3>
-    <div id="nft-preview">Connect wallet to see your NFT preview</div>
-    <button class="btn" id="mint-btn" disabled>Mint NFT (coming soon)</button>
-  </div>
+      <!-- Code Editor -->
+      <div class="code-editor">
+        <div class="line-numbers">
+          <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div><div>11</div><div>12</div><div>13</div><div>14</div><div>15</div><div>16</div><div>17</div>
+        </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.10.0/dist/ethers.min.js"></script>
-  <script>
-    const DECLARATION_ADDR = "0xB0731E7ea189c169640Fd890E5dcE9811040D0eA";
-    const DECLARATION_ABI = [
-      "function hasSigned(address) view returns (bool)",
-      "function signatureByAddress(address) view returns (string)",
-      "function totalSignatures() view returns (uint256)"
-    ];
+        <div class="code-content">
+          <div><span class="keyword">pragma</span> <span class="type">solidity</span> ^0.8.19;</div>
+          <br>
+          <div class="comment">/**</div>
+          <div class="comment"> * @title THE DECLARATION OF THE DAVES 001</div>
+          <div class="comment"> * @notice THE BANKSY STAYS ON THE WALL</div>
+          <div class="comment"> * @dev This contract is the art. Immutable. Permanent. Public.</div>
+          <div class="comment"> * @dev Co-sign the declaration by calling this function</div>
+          <div class="comment"> */</div>
+          <br>
+          <div><span class="keyword">function</span> <span class="function-name">cosignDeclaration</span>(<span class="type">string</span> <span class="type">memory</span> <span class="parameter">chosenName</span>) <span class="keyword">public</span> {</div>
+          <div style="margin-left: 20px;">
+            <div class="comment">// Enter your chosen name (lowercase, max 14 chars)</div>
+            <div class="input-line" id="inputLine" onclick="focusInput()">
+              <span class="input-prefix">require(chosenName == "</span>
+              <input type="text" class="name-input" id="nameInput" placeholder="your_name" maxlength="14" autocomplete="off" spellcheck="false">
+              <span class="input-suffix">", "Enter name");</span>
+            </div>
+            <div class="preview-comment">
+              <span class="comment">// Your signature will be: </span>
+              <span class="string" id="preview">i_am_your_name_dave</span>
+            </div>
+          </div>
+          <div>}</div>
 
-    let provider, signer, contract;
+          <div class="error-message" id="errorMsg">
+            ⚠️ <span id="errorText">Name can only contain lowercase letters, numbers, and hyphens</span>
+          </div>
+        </div>
+      </div>
 
-    async function connect() {
-      if (!window.ethereum) {
-        alert("Please install MetaMask or another wallet.");
-        return;
-      }
+      <!-- Action Section -->
+      <div class="action-section">
+        <div class="contract-info">
+          <div class="contract-label">Contract</div>
+          <a href="https://basescan.org/address/0xB0731E7ea189c169640Fd890E5dcE9811040D0eA#code"
+             target="_blank" rel="noopener noreferrer" class="contract-address-link">
+            0xB0731E7ea189c169640Fd890E5dcE9811040D0eA
+          </a>
+        </div>
+        <button class="execute-button" id="executeButton">CONNECT WALLET</button>
+      </div>
+    </div>
 
-      provider = new ethers.BrowserProvider(window.ethereum);
-      signer = await provider.getSigner();
-      contract = new ethers.Contract(DECLARATION_ADDR, DECLARATION_ABI, provider);
-
-      const addr = await signer.getAddress();
-      const signed = await contract.hasSigned(addr);
-
-      if (!signed) {
-        document.getElementById("nft-preview").innerText =
-          "You haven’t signed the declaration yet.";
-        return;
-      }
-
-      const daveName = await contract.signatureByAddress(addr);
-      renderPreview(daveName, addr);
-    }
-
-    function renderPreview(daveName, addr) {
-      const shortAddr = addr.slice(0, 6) + "..." + addr.slice(-4);
-      const displayName = daveName.replace("i_am_", "").replace("_dave", "");
-
-      const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
-          <rect width="300" height="300" fill="#161b22"/>
-          <text x="20" y="60" font-size="14" fill="#8b949e">Declaration of the Daves</text>
-          <text x="20" y="120" font-size="16" fill="#c9d1d9">Signed by:</text>
-          <text x="20" y="160" font-size="18" fill="#7ee787">${displayName}_dave</text>
-          <text x="20" y="220" font-size="12" fill="#79c0ff">${shortAddr}</text>
-        </svg>
-      `;
-
-      document.getElementById("nft-preview").innerHTML = svg;
-    }
-
-    connect();
-  </script>
-</body>
-</html>
+    <!-- NFT Preview -->
+    <div class="nft-container" id="nftPreview">
+      <div class="nft-code-editor">
+        <div class="nft-line-numbers">
+          <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div><div>11<
