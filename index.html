@@ -24,13 +24,20 @@
       background:#161b22; border:1px solid #30363d; border-radius:6px; width:100%;
       aspect-ratio:1; overflow:hidden; display:flex; flex-direction:column;
     }
+
     .contract-header {
       background:#0d1117; border-bottom:1px solid #30363d; padding:12px 20px;
-      display:flex; align-items:center; gap:8px;
+      display:flex; align-items:center; gap:8px; min-width:0; /* allow inner shrink/ellipsis */
     }
-    .file-icon{ color:#7ee787; }
-    .filename{ color:#f0f6fc; font-size:14px; }
-    .network-badge{ margin-left:auto; background:#1f6feb; color:#fff; padding:4px 12px; border-radius:20px; font-size:12px; }
+    .file-icon{ color:#7ee787; flex:0 0 auto; }
+    .filename{
+      color:#f0f6fc; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;
+    }
+    /* Badge must never wrap or shrink */
+    .network-badge{
+      margin-left:auto; background:#1f6feb; color:#fff; padding:4px 12px; border-radius:20px; font-size:12px;
+      white-space:nowrap; flex:0 0 auto;
+    }
 
     .code-editor{ flex:1; position:relative; display:flex; align-items:center; padding:40px 0; }
     .line-numbers{
@@ -81,16 +88,17 @@
     /* Action section */
     .action-section{
       background:#0d1117; border-top:1px solid #30363d; padding:20px;
-      display:flex; align-items:center; justify-content:space-between;
+      display:flex; align-items:center; justify-content:space-between; gap:16px; min-width:0;
     }
-    .contract-info{ font-size:12px; }
+    .contract-info{ font-size:12px; min-width:0; flex:1 1 auto; }
     .contract-label{ color:#8b949e; margin-bottom:4px; }
-    .contract-address-link{ color:#7ee787; text-decoration:none; transition:opacity .2s; }
+    .contract-address-link{ color:#7ee787; text-decoration:none; transition:opacity .2s; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .contract-address-link:hover{ opacity:.8; text-decoration:underline; }
+
     .execute-button{
       background:#f78166; color:#0d1117; border:none; padding:10px 24px; border-radius:6px;
       font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:all .2s;
-      text-transform:uppercase; letter-spacing:.5px;
+      text-transform:uppercase; letter-spacing:.5px; white-space:nowrap; flex:0 0 auto;
     }
     .execute-button:hover:not(:disabled){ background:#ff8c73; transform:translateY(-1px); }
     .execute-button:active:not(:disabled){ transform:translateY(0); }
@@ -162,19 +170,21 @@
       .code-content { font-size:11px; }
       .name-input   { font-size:11px; width:120px; }
 
-      /* Action row: prevent overflow */
-      .action-section { gap:10px; }
-      .contract-info { flex:1 1 auto; min-width:0; }
+      /* Action row: make it a rigid two-column grid so the button cannot overflow */
+      .action-section {
+        display:grid;
+        grid-template-columns: 1fr auto;
+        align-items:center;
+        gap:10px;
+      }
+      .contract-info { min-width:0; } /* enable ellipsis inside */
       .contract-address-link { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-      /* Button: one line, slightly smaller */
-      .execute-button { flex:0 0 auto; white-space:nowrap; font-size:12px; padding:8px 14px; }
+      /* Button: keep on one line and clamp its width */
+      .execute-button { white-space:nowrap; font-size:12px; padding:8px 14px; max-width:45vw; }
 
-      /* Header badge: keep it on one line */
-      .network-badge {
-        white-space:nowrap; font-size:11px; padding:3px 10px;
-        max-width:50%; overflow:hidden; text-overflow:ellipsis;
-      }
+      /* Header badge: keep it on one line and small; filename ellipsizes */
+      .network-badge { font-size:11px; padding:3px 10px; }
     }
 
     /* Ensure NFT preview is always square */
@@ -557,31 +567,4 @@
         } catch (error){
           console.error(error);
           executeButton.disabled=false; executeButton.innerHTML='EXECUTE TRANSACTION';
-          if (error.code === 'ACTION_REJECTED' || error.code === 4001){ showError('Transaction cancelled'); }
-          else if (error.message?.includes('allowlisted')){ showError('Only allowlisted addresses can sign during this period'); }
-          else { showError('Transaction failed. Please try again.'); }
-        }
-      }
-
-      function mintNFT(){ showError('NFT contract not deployed yet'); } // placeholder
-
-      executeButton.addEventListener('click', async ()=>{ if (!connected) await connectWallet(); else await signDeclaration(); });
-      mintButton.addEventListener('click', mintNFT);
-
-      // Enter-to-sign for both inputs
-      [nameInputDesktop, nameInputMobile].forEach(inp=>{
-        if (!inp) return;
-        inp.addEventListener('keypress', async (e)=>{ if (e.key==='Enter' && connected && !inp.disabled){ await signDeclaration(); } });
-      });
-
-      if (window.ethereum){
-        window.ethereum.on('accountsChanged', (accounts)=>{ if (!accounts.length) location.reload(); else if (connected && accounts[0].toLowerCase() !== (userAddress||'').toLowerCase()) location.reload(); });
-        window.ethereum.on('chainChanged', (id)=>{ if (id !== BASE_CHAIN_ID){ showError('Please switch back to Base network'); executeButton.innerHTML='CONNECT WALLET'; executeButton.disabled=false; connected=false; } });
-      }
-
-      // autofocus whichever is visible
-      const initial = activeInput(); if (initial) initial.focus();
-    });
-  </script>
-</body>
-</html>
+          if (error.code === 'ACTION_RE
