@@ -301,6 +301,140 @@
             cursor: not-allowed;
         }
         
+        /* WalletConnect Modal Styles */
+        .wallet-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .wallet-modal.show {
+            display: flex;
+        }
+        
+        .wallet-modal-content {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 400px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .wallet-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .wallet-modal-title {
+            color: #f0f6fc;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .wallet-modal-close {
+            background: none;
+            border: none;
+            color: #8b949e;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .wallet-modal-close:hover {
+            color: #c9d1d9;
+        }
+        
+        .wallet-options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .wallet-option {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .wallet-option:hover {
+            border-color: #58a6ff;
+            transform: translateY(-1px);
+        }
+        
+        .wallet-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        
+        .wallet-name {
+            color: #c9d1d9;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .wallet-description {
+            color: #8b949e;
+            font-size: 12px;
+            margin-top: 2px;
+        }
+        
+        /* QR Code container */
+        .qr-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: #0d1117;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .qr-container.show {
+            display: flex;
+        }
+        
+        .qr-code {
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .qr-instructions {
+            color: #8b949e;
+            font-size: 12px;
+            text-align: center;
+        }
+        
         /* Connected status */
         .wallet-status {
             position: absolute;
@@ -463,27 +597,6 @@
         }
         
         .success-message a:hover {
-            text-decoration: underline;
-        }
-        
-        /* Mobile wallet prompt */
-        .mobile-wallet-prompt {
-            background: #1f6feb;
-            color: white;
-            padding: 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            margin: 12px 0;
-            text-align: center;
-            display: none;
-        }
-        
-        .mobile-wallet-prompt.show {
-            display: block;
-        }
-        
-        .mobile-wallet-prompt a {
-            color: white;
             text-decoration: underline;
         }
         
@@ -714,10 +827,6 @@
                     <div class="error-message" id="errorMsg">
                         ⚠️ <span id="errorText">Name can only contain lowercase letters, numbers, and hyphens</span>
                     </div>
-                    
-                    <div class="mobile-wallet-prompt" id="mobileWalletPrompt">
-                        📱 Please open this page in your wallet's browser (MetaMask, Trust Wallet, etc.) or use a desktop browser with MetaMask extension.
-                    </div>
                 </div>
             </div>
             
@@ -733,6 +842,55 @@
                     </a>
                 </div>
                 <button class="execute-button" id="executeButton">CONNECT WALLET</button>
+            </div>
+        </div>
+        
+        <!-- Wallet Selection Modal -->
+        <div class="wallet-modal" id="walletModal">
+            <div class="wallet-modal-content">
+                <div class="wallet-modal-header">
+                    <h3 class="wallet-modal-title">Connect Wallet</h3>
+                    <button class="wallet-modal-close" id="closeModal">&times;</button>
+                </div>
+                
+                <div class="wallet-options" id="walletOptions">
+                    <!-- MetaMask option (injected) -->
+                    <div class="wallet-option" id="metamaskOption" style="display: none;">
+                        <div class="wallet-icon" style="background: #f6851b;">🦊</div>
+                        <div>
+                            <div class="wallet-name">MetaMask</div>
+                            <div class="wallet-description">Connect using browser extension</div>
+                        </div>
+                    </div>
+                    
+                    <!-- WalletConnect option -->
+                    <div class="wallet-option" id="walletConnectOption">
+                        <div class="wallet-icon" style="background: #3b99fc;">🔗</div>
+                        <div>
+                            <div class="wallet-name">WalletConnect</div>
+                            <div class="wallet-description">Scan with wallet to connect</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Coinbase Wallet option -->
+                    <div class="wallet-option" id="coinbaseOption">
+                        <div class="wallet-icon" style="background: #0052ff;">💰</div>
+                        <div>
+                            <div class="wallet-name">Coinbase Wallet</div>
+                            <div class="wallet-description">Connect with Coinbase Wallet</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- QR Code Container (hidden by default) -->
+                <div class="qr-container" id="qrContainer">
+                    <div class="qr-code" id="qrCode">
+                        <!-- QR code will be inserted here -->
+                    </div>
+                    <div class="qr-instructions">
+                        Scan with your wallet app to connect
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -777,70 +935,51 @@
     </div>
 
     <script>
-        // Mobile wallet detection
-        function detectMobileWallet() {
-            const userAgent = navigator.userAgent.toLowerCase();
-            const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
-            
-            // Check if ethereum object exists (injected by wallet)
-            const hasEthereum = typeof window.ethereum !== 'undefined';
-            const hasWeb3 = typeof window.web3 !== 'undefined';
-            
-            // Check if we're in a dApp browser by user agent
-            const isDappBrowser = 
-                hasEthereum ||
-                hasWeb3 ||
-                userAgent.includes('metamask') ||
-                userAgent.includes('trust') ||
-                userAgent.includes('coinbase') ||
-                userAgent.includes('tokenpocket') ||
-                userAgent.includes('imtoken') ||
-                userAgent.includes('mathwallet');
-            
-            // On mobile, sometimes ethereum injection is delayed
-            // So we should wait a bit before deciding
-            if (isMobile && !hasEthereum && !hasWeb3) {
-                // Check again after a short delay
-                setTimeout(() => {
-                    if (typeof window.ethereum !== 'undefined') {
-                        console.log('[Dave Contract] Ethereum detected after delay');
-                        // Hide the prompt if it's showing
-                        const prompt = document.getElementById('mobileWalletPrompt');
-                        if (prompt) {
-                            prompt.classList.remove('show');
-                        }
-                    }
-                }, 1500);
-            }
-            
-            return {
-                isMobile,
-                isDappBrowser,
-                hasWallet: hasEthereum || hasWeb3
-            };
-        }
-        
-        // Load ethers.js with better error handling
-        function loadEthers(callback) {
+        // Load libraries
+        function loadScript(src, callback) {
             const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js';
+            script.src = src;
             script.onload = callback;
             script.onerror = function() {
-                // Try alternative CDN
-                const altScript = document.createElement('script');
-                altScript.src = 'https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js';
-                altScript.onload = callback;
-                altScript.onerror = function() {
-                    showError('Failed to load Web3 library. Please refresh the page.');
-                };
-                document.head.appendChild(altScript);
+                console.error('Failed to load script:', src);
+                callback(new Error('Script load failed'));
             };
             document.head.appendChild(script);
         }
         
-        // Initialize widget after ethers loads
-        loadEthers(function() {
-            console.log('[Dave Contract] Ethers loaded successfully');
+        // Load ethers and WalletConnect
+        function loadLibraries(callback) {
+            // Load ethers first
+            loadScript('https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js', function(err) {
+                if (err) {
+                    loadScript('https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js', function(err2) {
+                        if (err2) {
+                            showError('Failed to load Web3 library. Please refresh the page.');
+                            return;
+                        }
+                        console.log('[Dave Contract] Ethers loaded from backup CDN');
+                        
+                        // Load WalletConnect
+                        loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js', function() {
+                            console.log('[Dave Contract] WalletConnect loaded');
+                            callback();
+                        });
+                    });
+                } else {
+                    console.log('[Dave Contract] Ethers loaded successfully');
+                    
+                    // Load WalletConnect
+                    loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js', function() {
+                        console.log('[Dave Contract] WalletConnect loaded');
+                        callback();
+                    });
+                }
+            });
+        }
+        
+        // Initialize widget after libraries load
+        loadLibraries(function() {
+            console.log('[Dave Contract] All libraries loaded');
             
             // Contract details
             const CONTRACT_ADDRESS = '0xB0731E7ea189c169640Fd890E5dcE9811040D0eA';
@@ -881,6 +1020,7 @@
             let userAddress = null;
             let currentTxHash = null;
             let signatureData = null;
+            let walletConnectProvider = null;
             
             // Elements
             const contractContainer = document.getElementById('contractContainer');
@@ -901,11 +1041,16 @@
             const successMessage = document.getElementById('successMessage');
             const successText = document.getElementById('successText');
             const openSeaLink = document.getElementById('openSeaLink');
-            const mobileWalletPrompt = document.getElementById('mobileWalletPrompt');
+            const walletModal = document.getElementById('walletModal');
+            const closeModal = document.getElementById('closeModal');
+            const metamaskOption = document.getElementById('metamaskOption');
+            const walletConnectOption = document.getElementById('walletConnectOption');
+            const coinbaseOption = document.getElementById('coinbaseOption');
+            const qrContainer = document.getElementById('qrContainer');
+            const qrCode = document.getElementById('qrCode');
             
-            // Check wallet availability
-            const walletInfo = detectMobileWallet();
-            const isMobile = window.innerWidth <= 600 || walletInfo.isMobile;
+            // Check if mobile
+            const isMobile = window.innerWidth <= 600 || /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent.toLowerCase());
             
             // Focus input helper
             window.focusInput = function() {
@@ -927,7 +1072,6 @@
                 
                 // Clear error on typing
                 errorMsg.classList.remove('show');
-                mobileWalletPrompt.classList.remove('show');
             }
             
             // Desktop input handlers
@@ -972,7 +1116,29 @@
             
             function clearMessages() {
                 errorMsg.classList.remove('show');
-                mobileWalletPrompt.classList.remove('show');
+            }
+            
+            // Modal handlers
+            closeModal.addEventListener('click', () => {
+                walletModal.classList.remove('show');
+                qrContainer.classList.remove('show');
+            });
+            
+            walletModal.addEventListener('click', (e) => {
+                if (e.target === walletModal) {
+                    walletModal.classList.remove('show');
+                    qrContainer.classList.remove('show');
+                }
+            });
+            
+            // Show wallet modal
+            function showWalletModal() {
+                walletModal.classList.add('show');
+                
+                // Show MetaMask option if available
+                if (window.ethereum && !isMobile) {
+                    metamaskOption.style.display = 'flex';
+                }
             }
             
             // Generate NFT preview content
@@ -995,12 +1161,11 @@
 <div class="address">${signerAddr}</div>`;
             }
             
-            // Get signature data for an address - CORRECTED to use allSignatures
+            // Get signature data for an address
             async function getSignatureData(address) {
                 try {
                     console.log('[Dave Contract] Getting signature data for:', address);
                     
-                    // First check if they've signed
                     const hasSigned = await contract.hasSigned(address);
                     console.log('[Dave Contract] Has signed:', hasSigned);
                     
@@ -1008,90 +1173,48 @@
                         return null;
                     }
                     
-                    // Get their signature string
                     const daveName = await contract.signatureByAddress(address);
                     console.log('[Dave Contract] Dave name:', daveName);
                     
-                    // Get total signatures to search through
                     const totalSigs = await contract.totalSignatures();
                     console.log('[Dave Contract] Total signatures:', totalSigs.toString());
                     
-                    // Search through signatures using allSignatures function
-                    // Note: allSignatures returns a struct, we need to handle it properly
                     for (let i = 0; i < totalSigs; i++) {
                         try {
-                            console.log(`[Dave Contract] Checking signature at index ${i}...`);
-                            
-                            // Call allSignatures which returns a tuple/struct
                             const sig = await contract.allSignatures(i);
                             
-                            // The struct has properties: daveName, signatory, timestamp, blockNumber
-                            // Access them directly or by index depending on ethers.js version
                             let sigAddress;
                             let sigDaveName;
                             let sigTimestamp;
                             let sigBlockNumber;
                             
-                            // Try accessing as object properties first
                             if (sig.signatory) {
                                 sigAddress = sig.signatory;
                                 sigDaveName = sig.daveName;
                                 sigTimestamp = sig.timestamp;
                                 sigBlockNumber = sig.blockNumber;
                             } else if (Array.isArray(sig)) {
-                                // If it's returned as array (older ethers.js)
                                 sigDaveName = sig[0];
                                 sigAddress = sig[1];
                                 sigTimestamp = sig[2];
                                 sigBlockNumber = sig[3];
-                            } else {
-                                console.log('[Dave Contract] Unexpected signature format:', sig);
-                                continue;
                             }
-                            
-                            console.log(`[Dave Contract] Signature ${i}: address=${sigAddress}, name=${sigDaveName}`);
                             
                             if (sigAddress && sigAddress.toLowerCase() === address.toLowerCase()) {
                                 console.log('[Dave Contract] Found matching signature at index:', i);
                                 return {
                                     daveName: sigDaveName || daveName,
-                                    signatureNumber: i + 1,  // Convert 0-indexed to 1-indexed
+                                    signatureNumber: i + 1,
                                     blockNumber: sigBlockNumber ? sigBlockNumber.toString() : 'Unknown',
                                     timestamp: sigTimestamp ? sigTimestamp.toString() : 'Unknown'
                                 };
                             }
                         } catch (err) {
                             console.error(`[Dave Contract] Error reading signature ${i}:`, err);
-                            
-                            // Try using getSignature function as fallback for this index
-                            try {
-                                console.log(`[Dave Contract] Trying getSignature for index ${i}...`);
-                                const sigData = await contract.getSignature(i);
-                                
-                                // getSignature returns: (string daveName, address signatory, uint256 timestamp, uint256 blockNumber)
-                                const [gDaveName, gSignatory, gTimestamp, gBlockNumber] = sigData;
-                                
-                                console.log(`[Dave Contract] getSignature ${i}: address=${gSignatory}, name=${gDaveName}`);
-                                
-                                if (gSignatory && gSignatory.toLowerCase() === address.toLowerCase()) {
-                                    console.log('[Dave Contract] Found via getSignature at index:', i);
-                                    return {
-                                        daveName: gDaveName || daveName,
-                                        signatureNumber: i + 1,
-                                        blockNumber: gBlockNumber ? gBlockNumber.toString() : 'Unknown',
-                                        timestamp: gTimestamp ? gTimestamp.toString() : 'Unknown'
-                                    };
-                                }
-                            } catch (getSignatureErr) {
-                                console.error(`[Dave Contract] getSignature also failed for index ${i}:`, getSignatureErr);
-                            }
                         }
                     }
                     
-                    // If we have a daveName but couldn't find complete data, warn but return what we have
                     if (daveName) {
-                        console.warn('[Dave Contract] WARNING: Could not find complete signature data in array');
-                        console.log('[Dave Contract] This might mean the signature was made before array tracking');
                         return {
                             daveName: daveName,
                             signatureNumber: 'Unknown',
@@ -1102,23 +1225,7 @@
                     
                     return null;
                 } catch (error) {
-                    console.error('[Dave Contract] Critical error in getSignatureData:', error);
-                    
-                    // Last resort: if we at least have the dave name, return that
-                    try {
-                        const daveName = await contract.signatureByAddress(address);
-                        if (daveName) {
-                            return {
-                                daveName: daveName,
-                                signatureNumber: 'Unknown',
-                                blockNumber: 'Unknown',
-                                timestamp: 'Unknown'
-                            };
-                        }
-                    } catch (finalErr) {
-                        console.error('[Dave Contract] Could not even get dave name:', finalErr);
-                    }
-                    
+                    console.error('[Dave Contract] Error getting signature data:', error);
                     return null;
                 }
             }
@@ -1147,7 +1254,6 @@
             
             // Show NFT preview for already-signed users
             async function showExistingSignature() {
-                // Get signature data
                 signatureData = await getSignatureData(userAddress);
                 
                 if (!signatureData) {
@@ -1157,7 +1263,6 @@
                 
                 console.log('[Dave Contract] Showing existing signature:', signatureData);
                 
-                // Update UI for already-signed state
                 nameInput.disabled = true;
                 mobileNameInput.disabled = true;
                 nameInput.value = '';
@@ -1169,11 +1274,8 @@
                 executeButton.innerHTML = 'SIGNED';
                 executeButton.disabled = true;
                 
-                // Collapse top frame on mobile
                 collapseTopFrame();
                 
-                // Generate and show NFT preview
-                // Note: We don't have the original tx hash, so showing placeholder
                 nftContent.innerHTML = generateNFTPreview(
                     signatureData.daveName,
                     signatureData.signatureNumber,
@@ -1184,24 +1286,18 @@
                 
                 nftPreview.classList.add('show');
                 
-                // Check if they can mint
                 const { canMint, hasMinted } = await checkNFTStatus();
                 
                 if (hasMinted && NFT_CONTRACT_ADDRESS !== 'YOUR_NFT_CONTRACT_ADDRESS_HERE') {
-                    // Already minted - show success message instead of mint button
                     const tokenId = await nftContract.addressToTokenId(userAddress);
                     successText.textContent = `You already minted NFT #${tokenId}`;
                     openSeaLink.href = `https://opensea.io/assets/base/${NFT_CONTRACT_ADDRESS}/${tokenId}`;
                     successMessage.classList.add('show');
                 } else if (canMint) {
-                    // Can mint - show mint button
                     mintButtonContainer.classList.add('show');
-                    
-                    // Note about retroactive mint
                     mintButton.title = 'Retroactive mint - will be marked as pre-NFT signature';
                 }
                 
-                // Send resize message to parent
                 setTimeout(() => {
                     if (window.parent !== window) {
                         window.parent.postMessage({
@@ -1214,60 +1310,112 @@
                 return true;
             }
             
-            // Connect wallet
-            async function connectWallet() {
+            // Connect with injected provider (MetaMask)
+            async function connectInjected() {
+                if (!window.ethereum) {
+                    showError('MetaMask not detected');
+                    return;
+                }
+                
+                walletModal.classList.remove('show');
+                await connectWallet(window.ethereum);
+            }
+            
+            // Connect with WalletConnect
+            async function connectWalletConnect() {
+                try {
+                    console.log('[Dave Contract] Initializing WalletConnect...');
+                    
+                    // Show QR code container
+                    qrContainer.classList.add('show');
+                    qrCode.innerHTML = 'Loading...';
+                    
+                    // Initialize WalletConnect Provider
+                    const WalletConnectProvider = window.WalletConnectProvider.default;
+                    walletConnectProvider = new WalletConnectProvider({
+                        rpc: {
+                            8453: 'https://mainnet.base.org'
+                        },
+                        chainId: BASE_CHAIN_ID_DEC,
+                        qrcodeModal: {
+                            open: (uri, cb) => {
+                                console.log('[Dave Contract] WalletConnect URI:', uri);
+                                // Generate QR code
+                                qrCode.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(uri)}" alt="QR Code" />`;
+                            },
+                            close: () => {
+                                qrContainer.classList.remove('show');
+                            }
+                        }
+                    });
+                    
+                    // Enable session (triggers QR Code modal)
+                    await walletConnectProvider.enable();
+                    console.log('[Dave Contract] WalletConnect connected');
+                    
+                    walletModal.classList.remove('show');
+                    qrContainer.classList.remove('show');
+                    
+                    // Connect with the WalletConnect provider
+                    await connectWallet(walletConnectProvider);
+                    
+                } catch (error) {
+                    console.error('[Dave Contract] WalletConnect error:', error);
+                    qrContainer.classList.remove('show');
+                    if (error.message?.includes('User closed modal')) {
+                        showError('Connection cancelled');
+                    } else {
+                        showError('WalletConnect connection failed');
+                    }
+                }
+            }
+            
+            // Connect with Coinbase Wallet
+            async function connectCoinbase() {
+                try {
+                    console.log('[Dave Contract] Connecting to Coinbase Wallet...');
+                    
+                    // Check if Coinbase Wallet extension is installed
+                    if (window.ethereum?.isCoinbaseWallet) {
+                        walletModal.classList.remove('show');
+                        await connectWallet(window.ethereum);
+                    } else {
+                        // Use WalletConnect for Coinbase Wallet mobile
+                        await connectWalletConnect();
+                    }
+                } catch (error) {
+                    console.error('[Dave Contract] Coinbase Wallet error:', error);
+                    showError('Coinbase Wallet connection failed');
+                }
+            }
+            
+            // Main connect wallet function
+            async function connectWallet(walletProvider) {
                 try {
                     clearMessages();
                     console.log('[Dave Contract] Starting connection...');
-                    console.log('[Dave Contract] Wallet info:', walletInfo);
-                    console.log('[Dave Contract] Window.ethereum exists:', typeof window.ethereum !== 'undefined');
-                    
-                    // For mobile, wait a bit for wallet injection
-                    if (walletInfo.isMobile && !window.ethereum) {
-                        console.log('[Dave Contract] Mobile detected, waiting for wallet injection...');
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                        
-                        // Check again
-                        if (!window.ethereum) {
-                            console.log('[Dave Contract] Still no ethereum object after wait');
-                            if (!walletInfo.isDappBrowser) {
-                                mobileWalletPrompt.classList.add('show');
-                                return;
-                            }
-                        } else {
-                            console.log('[Dave Contract] Ethereum object found after wait');
-                        }
-                    }
-                    
-                    // Final check for wallet
-                    if (!window.ethereum) {
-                        if (walletInfo.isMobile) {
-                            mobileWalletPrompt.classList.add('show');
-                        } else {
-                            showError('Please install MetaMask or another Web3 wallet');
-                        }
-                        return;
-                    }
                     
                     executeButton.disabled = true;
                     executeButton.innerHTML = 'CONNECTING...';
                     
-                    // Request accounts with better error handling for mobile
+                    // Setup provider based on wallet type
+                    if (walletProvider) {
+                        provider = new window.ethers.providers.Web3Provider(walletProvider);
+                    } else {
+                        showError('No wallet provider found');
+                        executeButton.disabled = false;
+                        executeButton.innerHTML = 'CONNECT WALLET';
+                        return;
+                    }
+                    
+                    // Request accounts
                     let accounts;
                     try {
-                        accounts = await window.ethereum.request({ 
-                            method: 'eth_requestAccounts' 
-                        });
+                        accounts = await provider.send('eth_requestAccounts', []);
                         console.log('[Dave Contract] Accounts:', accounts);
                     } catch (err) {
                         console.error('[Dave Contract] Account request error:', err);
-                        if (err.code === -32002) {
-                            showError('Please unlock your wallet');
-                        } else if (err.code === 4001) {
-                            showError('Connection rejected');
-                        } else {
-                            showError('Failed to connect wallet');
-                        }
+                        showError('Failed to get accounts');
                         executeButton.disabled = false;
                         executeButton.innerHTML = 'CONNECT WALLET';
                         return;
@@ -1278,20 +1426,29 @@
                     }
                     
                     // Get current chain
-                    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-                    console.log('[Dave Contract] Current chain:', chainId);
+                    const network = await provider.getNetwork();
+                    console.log('[Dave Contract] Current network:', network);
                     
                     // Switch to Base if needed
-                    if (chainId !== BASE_CHAIN_ID) {
+                    if (network.chainId !== BASE_CHAIN_ID_DEC) {
                         try {
-                            await window.ethereum.request({
-                                method: 'wallet_switchEthereumChain',
-                                params: [{ chainId: BASE_CHAIN_ID }],
-                            });
+                            if (walletProvider === window.ethereum) {
+                                // For injected provider
+                                await walletProvider.request({
+                                    method: 'wallet_switchEthereumChain',
+                                    params: [{ chainId: BASE_CHAIN_ID }],
+                                });
+                            } else {
+                                // For WalletConnect
+                                showError('Please switch to Base network in your wallet');
+                                executeButton.disabled = false;
+                                executeButton.innerHTML = 'CONNECT WALLET';
+                                return;
+                            }
                         } catch (switchError) {
                             if (switchError.code === 4902) {
                                 try {
-                                    await window.ethereum.request({
+                                    await walletProvider.request({
                                         method: 'wallet_addEthereumChain',
                                         params: [{
                                             chainId: BASE_CHAIN_ID,
@@ -1318,15 +1475,12 @@
                                 return;
                             }
                         }
-                    }
-                    
-                    // Setup provider
-                    provider = new window.ethers.providers.Web3Provider(window.ethereum);
-                    const network = await provider.getNetwork();
-                    console.log('[Dave Contract] Network:', network);
-                    
-                    if (network.chainId !== BASE_CHAIN_ID_DEC) {
-                        throw new Error('Wrong network after switch');
+                        
+                        // Re-check network after switch
+                        const newNetwork = await provider.getNetwork();
+                        if (newNetwork.chainId !== BASE_CHAIN_ID_DEC) {
+                            throw new Error('Wrong network after switch');
+                        }
                     }
                     
                     signer = provider.getSigner();
@@ -1336,7 +1490,6 @@
                     // Setup contracts
                     contract = new window.ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
                     
-                    // Setup NFT contract if deployed
                     if (NFT_CONTRACT_ADDRESS !== 'YOUR_NFT_CONTRACT_ADDRESS_HERE') {
                         nftContract = new window.ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_CONTRACT_ABI, signer);
                     }
@@ -1355,16 +1508,13 @@
                     walletStatus.classList.add('connected');
                     
                     if (hasSigned) {
-                        // User already signed - show their NFT preview
                         console.log('[Dave Contract] User already signed, showing NFT preview');
                         const shown = await showExistingSignature();
                         if (!shown) {
-                            // If we couldn't show the signature, still update button
                             executeButton.innerHTML = 'ALREADY SIGNED';
                             executeButton.disabled = true;
                         }
                     } else {
-                        // New user - enable signing
                         connected = true;
                         executeButton.innerHTML = 'EXECUTE TRANSACTION';
                         executeButton.disabled = false;
@@ -1386,7 +1536,6 @@
                     
                     const name = (isMobile ? mobileNameInput.value : nameInput.value).trim().toLowerCase();
                     
-                    // Validate
                     if (!name) {
                         showError('Please enter a name');
                         return;
@@ -1402,7 +1551,6 @@
                         return;
                     }
                     
-                    // Check if name exists
                     const fullName = `i_am_${name}_dave`;
                     const nameExists = await contract.nameExists(fullName);
                     if (nameExists) {
@@ -1410,7 +1558,6 @@
                         return;
                     }
                     
-                    // Sign
                     executeButton.disabled = true;
                     executeButton.innerHTML = 'SIGNING<span class="loading-spinner"></span>';
                     
@@ -1423,14 +1570,12 @@
                     const txReceipt = await tx.wait();
                     console.log('[Dave Contract] Transaction confirmed');
                     
-                    // Get signature number from event
                     let signatureNumber = 'N/A';
                     const event = txReceipt.events?.find(e => e.event === 'DeclarationSigned');
                     if (event) {
                         signatureNumber = event.args.signatureNumber.toString();
                     }
                     
-                    // Store signature data
                     signatureData = {
                         daveName: fullName,
                         signatureNumber: signatureNumber,
@@ -1438,7 +1583,6 @@
                         timestamp: Date.now()
                     };
                     
-                    // Update UI to show NFT preview
                     nameInput.value = '';
                     mobileNameInput.value = '';
                     nameInput.disabled = true;
@@ -1450,10 +1594,8 @@
                     executeButton.innerHTML = 'SIGNED';
                     executeButton.disabled = true;
                     
-                    // Collapse top frame on mobile
                     collapseTopFrame();
                     
-                    // Generate and show NFT preview
                     nftContent.innerHTML = generateNFTPreview(
                         fullName,
                         signatureNumber,
@@ -1465,7 +1607,6 @@
                     nftPreview.classList.add('show');
                     mintButtonContainer.classList.add('show');
                     
-                    // Send resize message to parent
                     setTimeout(() => {
                         if (window.parent !== window) {
                             window.parent.postMessage({
@@ -1506,13 +1647,9 @@
                     mintButton.disabled = true;
                     mintButton.innerHTML = 'MINTING<span class="loading-spinner"></span>';
                     
-                    // Get mint price
                     const mintPrice = await nftContract.MINT_PRICE();
-                    
-                    // Use current tx hash if available, otherwise use empty bytes32 for retroactive
                     const txHashToUse = currentTxHash || '0x0000000000000000000000000000000000000000000000000000000000000000';
                     
-                    // Mint NFT with signature number and block number
                     const tx = await nftContract.mint(
                         txHashToUse,
                         signatureData.signatureNumber,
@@ -1529,10 +1666,8 @@
                     const receipt = await tx.wait();
                     console.log('[Dave Contract] NFT minted successfully');
                     
-                    // Get token ID
                     const tokenId = await nftContract.addressToTokenId(userAddress);
                     
-                    // Hide mint button and show success
                     mintButtonContainer.classList.remove('show');
                     successText.textContent = `NFT #${tokenId} Minted Successfully!`;
                     openSeaLink.href = `https://opensea.io/assets/base/${NFT_CONTRACT_ADDRESS}/${tokenId}`;
@@ -1555,10 +1690,15 @@
                 }
             }
             
+            // Wallet option click handlers
+            metamaskOption.addEventListener('click', connectInjected);
+            walletConnectOption.addEventListener('click', connectWalletConnect);
+            coinbaseOption.addEventListener('click', connectCoinbase);
+            
             // Button handlers
             executeButton.addEventListener('click', async () => {
                 if (!connected) {
-                    await connectWallet();
+                    showWalletModal();
                 } else {
                     await signDeclaration();
                 }
@@ -1566,7 +1706,7 @@
             
             mintButton.addEventListener('click', mintNFT);
             
-            // Enter key
+            // Enter key handlers
             nameInput.addEventListener('keypress', async (e) => {
                 if (e.key === 'Enter' && connected && !nameInput.disabled) {
                     await signDeclaration();
@@ -1598,7 +1738,6 @@
                         mintButtonContainer.classList.remove('show');
                         successMessage.classList.remove('show');
                     } else if (connected && accounts[0].toLowerCase() !== userAddress.toLowerCase()) {
-                        // Account changed - reconnect
                         window.location.reload();
                     }
                 });
@@ -1618,8 +1757,7 @@
                 nameInput.focus();
             }
             
-            // Log wallet detection for debugging
-            console.log('[Dave Contract] Wallet detection:', walletInfo);
+            console.log('[Dave Contract] Widget initialized with WalletConnect support');
         });
     </script>
 </body>
