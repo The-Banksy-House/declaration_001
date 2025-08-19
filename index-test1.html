@@ -935,51 +935,27 @@
     </div>
 
     <script>
-        // Load libraries
-        function loadScript(src, callback) {
+        // Load ethers.js with better error handling
+        function loadEthers(callback) {
             const script = document.createElement('script');
-            script.src = src;
+            script.src = 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js';
             script.onload = callback;
             script.onerror = function() {
-                console.error('Failed to load script:', src);
-                callback(new Error('Script load failed'));
+                // Try alternative CDN
+                const altScript = document.createElement('script');
+                altScript.src = 'https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js';
+                altScript.onload = callback;
+                altScript.onerror = function() {
+                    showError('Failed to load Web3 library. Please refresh the page.');
+                };
+                document.head.appendChild(altScript);
             };
             document.head.appendChild(script);
         }
         
-        // Load ethers and WalletConnect
-        function loadLibraries(callback) {
-            // Load ethers first
-            loadScript('https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js', function(err) {
-                if (err) {
-                    loadScript('https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js', function(err2) {
-                        if (err2) {
-                            showError('Failed to load Web3 library. Please refresh the page.');
-                            return;
-                        }
-                        console.log('[Dave Contract] Ethers loaded from backup CDN');
-                        
-                        // Load WalletConnect
-                        loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js', function() {
-                            console.log('[Dave Contract] WalletConnect loaded');
-                            callback();
-                        });
-                    });
-                } else {
-                    console.log('[Dave Contract] Ethers loaded successfully');
-                    
-                    // Load WalletConnect
-                    loadScript('https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js', function() {
-                        console.log('[Dave Contract] WalletConnect loaded');
-                        callback();
-                    });
-                }
-            });
-        }
-        
-        // Initialize widget after libraries load
-        loadLibraries(function() {
-            console.log('[Dave Contract] All libraries loaded');
+        // Initialize widget after ethers loads
+        loadEthers(function() {
+            console.log('[Dave Contract] Ethers loaded successfully');
             
             // Contract details
             const CONTRACT_ADDRESS = '0xB0731E7ea189c169640Fd890E5dcE9811040D0eA';
@@ -1133,11 +1109,18 @@
             
             // Show wallet modal
             function showWalletModal() {
-                walletModal.classList.add('show');
-                
-                // Show MetaMask option if available
+                // On desktop with MetaMask
                 if (window.ethereum && !isMobile) {
-                    metamaskOption.style.display = 'flex';
+                    connectInjected();
+                } 
+                // On mobile or no MetaMask - show modal
+                else {
+                    walletModal.classList.add('show');
+                    
+                    // Show MetaMask option if available
+                    if (window.ethereum) {
+                        metamaskOption.style.display = 'flex';
+                    }
                 }
             }
             
@@ -1321,52 +1304,18 @@
                 await connectWallet(window.ethereum);
             }
             
-            // Connect with WalletConnect
+            // Connect with WalletConnect - Simplified version
             async function connectWalletConnect() {
                 try {
-                    console.log('[Dave Contract] Initializing WalletConnect...');
+                    console.log('[Dave Contract] WalletConnect selected');
                     
-                    // Show QR code container
-                    qrContainer.classList.add('show');
-                    qrCode.innerHTML = 'Loading...';
-                    
-                    // Initialize WalletConnect Provider
-                    const WalletConnectProvider = window.WalletConnectProvider.default;
-                    walletConnectProvider = new WalletConnectProvider({
-                        rpc: {
-                            8453: 'https://mainnet.base.org'
-                        },
-                        chainId: BASE_CHAIN_ID_DEC,
-                        qrcodeModal: {
-                            open: (uri, cb) => {
-                                console.log('[Dave Contract] WalletConnect URI:', uri);
-                                // Generate QR code
-                                qrCode.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(uri)}" alt="QR Code" />`;
-                            },
-                            close: () => {
-                                qrContainer.classList.remove('show');
-                            }
-                        }
-                    });
-                    
-                    // Enable session (triggers QR Code modal)
-                    await walletConnectProvider.enable();
-                    console.log('[Dave Contract] WalletConnect connected');
-                    
+                    // For now, show a message to use a wallet browser
                     walletModal.classList.remove('show');
-                    qrContainer.classList.remove('show');
-                    
-                    // Connect with the WalletConnect provider
-                    await connectWallet(walletConnectProvider);
+                    showError('Please use your wallet app browser (MetaMask, Rainbow, Coinbase Wallet) to connect');
                     
                 } catch (error) {
                     console.error('[Dave Contract] WalletConnect error:', error);
-                    qrContainer.classList.remove('show');
-                    if (error.message?.includes('User closed modal')) {
-                        showError('Connection cancelled');
-                    } else {
-                        showError('WalletConnect connection failed');
-                    }
+                    showError('WalletConnect connection failed');
                 }
             }
             
@@ -1380,8 +1329,9 @@
                         walletModal.classList.remove('show');
                         await connectWallet(window.ethereum);
                     } else {
-                        // Use WalletConnect for Coinbase Wallet mobile
-                        await connectWalletConnect();
+                        // Direct to Coinbase Wallet
+                        walletModal.classList.remove('show');
+                        showError('Please use Coinbase Wallet app browser to connect');
                     }
                 } catch (error) {
                     console.error('[Dave Contract] Coinbase Wallet error:', error);
