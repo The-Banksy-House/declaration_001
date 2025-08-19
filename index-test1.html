@@ -782,19 +782,41 @@
             const userAgent = navigator.userAgent.toLowerCase();
             const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
             
-            // Check if we're in a dApp browser
+            // Check if ethereum object exists (injected by wallet)
+            const hasEthereum = typeof window.ethereum !== 'undefined';
+            const hasWeb3 = typeof window.web3 !== 'undefined';
+            
+            // Check if we're in a dApp browser by user agent
             const isDappBrowser = 
-                typeof window.ethereum !== 'undefined' ||
-                typeof window.web3 !== 'undefined' ||
+                hasEthereum ||
+                hasWeb3 ||
                 userAgent.includes('metamask') ||
                 userAgent.includes('trust') ||
                 userAgent.includes('coinbase') ||
-                userAgent.includes('tokenpocket');
+                userAgent.includes('tokenpocket') ||
+                userAgent.includes('imtoken') ||
+                userAgent.includes('mathwallet');
+            
+            // On mobile, sometimes ethereum injection is delayed
+            // So we should wait a bit before deciding
+            if (isMobile && !hasEthereum && !hasWeb3) {
+                // Check again after a short delay
+                setTimeout(() => {
+                    if (typeof window.ethereum !== 'undefined') {
+                        console.log('[Dave Contract] Ethereum detected after delay');
+                        // Hide the prompt if it's showing
+                        const prompt = document.getElementById('mobileWalletPrompt');
+                        if (prompt) {
+                            prompt.classList.remove('show');
+                        }
+                    }
+                }, 1500);
+            }
             
             return {
                 isMobile,
                 isDappBrowser,
-                hasWallet: typeof window.ethereum !== 'undefined'
+                hasWallet: hasEthereum || hasWeb3
             };
         }
         
@@ -995,29 +1017,81 @@
                     console.log('[Dave Contract] Total signatures:', totalSigs.toString());
                     
                     // Search through signatures using allSignatures function
+                    // Note: allSignatures returns a struct, we need to handle it properly
                     for (let i = 0; i < totalSigs; i++) {
                         try {
-                            // Use allSignatures instead of signatures
-                            const sig = await contract.allSignatures(i);
-                            console.log(`[Dave Contract] Checking signature ${i}:`, sig.signatory);
+                            console.log(`[Dave Contract] Checking signature at index ${i}...`);
                             
-                            if (sig.signatory.toLowerCase() === address.toLowerCase()) {
+                            // Call allSignatures which returns a tuple/struct
+                            const sig = await contract.allSignatures(i);
+                            
+                            // The struct has properties: daveName, signatory, timestamp, blockNumber
+                            // Access them directly or by index depending on ethers.js version
+                            let sigAddress;
+                            let sigDaveName;
+                            let sigTimestamp;
+                            let sigBlockNumber;
+                            
+                            // Try accessing as object properties first
+                            if (sig.signatory) {
+                                sigAddress = sig.signatory;
+                                sigDaveName = sig.daveName;
+                                sigTimestamp = sig.timestamp;
+                                sigBlockNumber = sig.blockNumber;
+                            } else if (Array.isArray(sig)) {
+                                // If it's returned as array (older ethers.js)
+                                sigDaveName = sig[0];
+                                sigAddress = sig[1];
+                                sigTimestamp = sig[2];
+                                sigBlockNumber = sig[3];
+                            } else {
+                                console.log('[Dave Contract] Unexpected signature format:', sig);
+                                continue;
+                            }
+                            
+                            console.log(`[Dave Contract] Signature ${i}: address=${sigAddress}, name=${sigDaveName}`);
+                            
+                            if (sigAddress && sigAddress.toLowerCase() === address.toLowerCase()) {
                                 console.log('[Dave Contract] Found matching signature at index:', i);
                                 return {
-                                    daveName: sig.daveName,
+                                    daveName: sigDaveName || daveName,
                                     signatureNumber: i + 1,  // Convert 0-indexed to 1-indexed
-                                    blockNumber: sig.blockNumber.toString(),
-                                    timestamp: sig.timestamp.toString()
+                                    blockNumber: sigBlockNumber ? sigBlockNumber.toString() : 'Unknown',
+                                    timestamp: sigTimestamp ? sigTimestamp.toString() : 'Unknown'
                                 };
                             }
                         } catch (err) {
                             console.error(`[Dave Contract] Error reading signature ${i}:`, err);
+                            
+                            // Try using getSignature function as fallback for this index
+                            try {
+                                console.log(`[Dave Contract] Trying getSignature for index ${i}...`);
+                                const sigData = await contract.getSignature(i);
+                                
+                                // getSignature returns: (string daveName, address signatory, uint256 timestamp, uint256 blockNumber)
+                                const [gDaveName, gSignatory, gTimestamp, gBlockNumber] = sigData;
+                                
+                                console.log(`[Dave Contract] getSignature ${i}: address=${gSignatory}, name=${gDaveName}`);
+                                
+                                if (gSignatory && gSignatory.toLowerCase() === address.toLowerCase()) {
+                                    console.log('[Dave Contract] Found via getSignature at index:', i);
+                                    return {
+                                        daveName: gDaveName || daveName,
+                                        signatureNumber: i + 1,
+                                        blockNumber: gBlockNumber ? gBlockNumber.toString() : 'Unknown',
+                                        timestamp: gTimestamp ? gTimestamp.toString() : 'Unknown'
+                                    };
+                                }
+                            } catch (getSignatureErr) {
+                                console.error(`[Dave Contract] getSignature also failed for index ${i}:`, getSignatureErr);
+                            }
                         }
                     }
                     
-                    // If we have a daveName but couldn't find in array, still return partial data
+                    // If we have a daveName but couldn't find complete data, warn but return what we have
                     if (daveName) {
-                        console.log('[Dave Contract] Could not find in array, returning partial data');
+                        console.warn('[Dave Contract] WARNING: Could not find complete signature data in array');
+                        console.log('[Dave Contract] This might mean the signature was made before array tracking');
                         return {
                             daveName: daveName,
                             signatureNumber: 'Unknown',
@@ -1028,24 +1102,23 @@
                     
                     return null;
                 } catch (error) {
-                    console.error('[Dave Contract] Error getting signature data:', error);
-                    // Try alternative method using getSignature if available
+                    console.error('[Dave Contract] Critical error in getSignatureData:', error);
+                    
+                    // Last resort: if we at least have the dave name, return that
                     try {
-                        const totalSigs = await contract.totalSignatures();
-                        for (let i = 0; i < totalSigs; i++) {
-                            const [daveName, signatory, timestamp, blockNumber] = await contract.getSignature(i);
-                            if (signatory.toLowerCase() === address.toLowerCase()) {
-                                return {
-                                    daveName: daveName,
-                                    signatureNumber: i + 1,
-                                    blockNumber: blockNumber.toString(),
-                                    timestamp: timestamp.toString()
-                                };
-                            }
+                        const daveName = await contract.signatureByAddress(address);
+                        if (daveName) {
+                            return {
+                                daveName: daveName,
+                                signatureNumber: 'Unknown',
+                                blockNumber: 'Unknown',
+                                timestamp: 'Unknown'
+                            };
                         }
-                    } catch (altError) {
-                        console.error('[Dave Contract] Alternative method also failed:', altError);
+                    } catch (finalErr) {
+                        console.error('[Dave Contract] Could not even get dave name:', finalErr);
                     }
+                    
                     return null;
                 }
             }
@@ -1147,18 +1220,33 @@
                     clearMessages();
                     console.log('[Dave Contract] Starting connection...');
                     console.log('[Dave Contract] Wallet info:', walletInfo);
+                    console.log('[Dave Contract] Window.ethereum exists:', typeof window.ethereum !== 'undefined');
                     
-                    // Check for wallet
-                    if (!walletInfo.hasWallet) {
-                        if (walletInfo.isMobile && !walletInfo.isDappBrowser) {
-                            // Mobile but not in dApp browser
-                            mobileWalletPrompt.classList.add('show');
-                            return;
+                    // For mobile, wait a bit for wallet injection
+                    if (walletInfo.isMobile && !window.ethereum) {
+                        console.log('[Dave Contract] Mobile detected, waiting for wallet injection...');
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        
+                        // Check again
+                        if (!window.ethereum) {
+                            console.log('[Dave Contract] Still no ethereum object after wait');
+                            if (!walletInfo.isDappBrowser) {
+                                mobileWalletPrompt.classList.add('show');
+                                return;
+                            }
                         } else {
-                            // Desktop without wallet
-                            showError('Please install MetaMask or another Web3 wallet');
-                            return;
+                            console.log('[Dave Contract] Ethereum object found after wait');
                         }
+                    }
+                    
+                    // Final check for wallet
+                    if (!window.ethereum) {
+                        if (walletInfo.isMobile) {
+                            mobileWalletPrompt.classList.add('show');
+                        } else {
+                            showError('Please install MetaMask or another Web3 wallet');
+                        }
+                        return;
                     }
                     
                     executeButton.disabled = true;
