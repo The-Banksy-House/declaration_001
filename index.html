@@ -161,8 +161,22 @@
 
       .code-content { font-size:11px; }
       .name-input   { font-size:11px; width:120px; }
-      .execute-button { font-size:12px; padding:8px 20px; }
+
+      /* Action row: prevent overflow */
+      .action-section { gap:10px; }
+      .contract-info { flex:1 1 auto; min-width:0; }
+      .contract-address-link { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+      /* Button: one line, slightly smaller */
+      .execute-button { flex:0 0 auto; white-space:nowrap; font-size:12px; padding:8px 14px; }
+
+      /* Header badge: keep it on one line */
+      .network-badge {
+        white-space:nowrap; font-size:11px; padding:3px 10px;
+        max-width:50%; overflow:hidden; text-overflow:ellipsis;
+      }
     }
+
     /* Ensure NFT preview is always square */
     .nft-container { aspect-ratio: 1; }
   </style>
@@ -342,10 +356,8 @@
       const successText = document.getElementById('successText');
       const openSeaLink = document.getElementById('openSeaLink');
 
-      // helpers
       const isMobile = () => window.matchMedia('(max-width: 600px)').matches;
       const activeInput = () => isMobile() ? nameInputMobile : nameInputDesktop;
-      const activeLine  = () => isMobile() ? inputLineMobile : inputLineDesktop;
 
       window.focusInput = function(){ const el = activeInput(); if (el && !el.disabled) el.focus(); };
       function showError(m){ errorText.textContent=m; errorMsg.classList.add('show'); setTimeout(()=>errorMsg.classList.remove('show'),7000); }
