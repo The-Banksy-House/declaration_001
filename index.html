@@ -42,11 +42,19 @@
 <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 <script>
 /* =================== CONFIG =================== */
-const CHAIN_ID_HEX = "0x14a34"; // Base Sepolia 84532
+const CHAIN_ID_HEX = "0x14a34"; // 84532
 const EXPLORER = "https://sepolia.basescan.org";
 const DECLARATION_ADDR = "0xB0731E7ea189c169640Fd890E5dcE9811040D0eA";
 const SBT_ADDR         = "0xe255130A9e2277640d3DfB045075a38d63a34D06";
 const DECLARATION_DEPLOY_BLOCK = 30558001;
+
+const BASE_SEPOLIA = {
+  chainId: CHAIN_ID_HEX,
+  chainName: "Base Sepolia",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: ["https://sepolia.base.org"],
+  blockExplorerUrls: [EXPLORER]
+};
 
 /* ABIs */
 const DECLARATION_ABI = [
@@ -103,12 +111,29 @@ function normalizeInput(e){
   updatePreview();
 }
 
+/* =================== ERROR UTIL =================== */
+function decodeErrorData(data){
+  try{
+    const hex = typeof data === "string" ? data : data?.data || "";
+    if (typeof hex === "string" && hex.startsWith("0x08c379a0")) {
+      // Error(string): strip selector and decode
+      const reason = ethers.utils.defaultAbiCoder.decode(["string"], "0x"+hex.slice(10));
+      return reason?.[0];
+    }
+  }catch{}
+  return null;
+}
+function rpcMessage(err){
+  const d = err?.data || err?.error?.data || err?.error || {};
+  const reason = decodeErrorData(d?.originalError?.data || d?.data || d);
+  return reason || d?.message || err?.error?.message || err?.message || "Unknown RPC error";
+}
+
 /* =================== EIP-6963 DISCOVERY (passive on load) =================== */
 function startDiscovery(){
   discovered = [];
   window.addEventListener("eip6963:announceProvider", (event) => {
     const d = event.detail; // { info, provider }
-    // de-dup by uuid or rdns
     if (!discovered.some(x => (x.info?.uuid && x.info.uuid===d.info.uuid) || (x.info?.rdns && x.info.rdns===d.info.rdns))) {
       discovered.push(d);
     }
@@ -173,6 +198,28 @@ function useProvider(detail, remember){
 
 /* =================== CHAIN / RPC HELPERS =================== */
 async function readChainId(p){ const id=await p.request({method:"eth_chainId"}); return (id||"").toLowerCase(); }
+async function attemptSwitchNetwork(){
+  if(!selectedProvider) return false;
+  try{
+    await selectedProvider.request({ method:"wallet_switchEthereumChain", params:[{ chainId: CHAIN_ID_HEX }] });
+    return true;
+  }catch(err){
+    if(err?.code===4902 || err?.data?.originalError?.code===4902){
+      try{
+        await selectedProvider.request({ method:"wallet_addEthereumChain", params:[BASE_SEPOLIA] });
+        return true;
+      }catch{}
+    }
+  }
+  return false;
+}
+async function preflightContracts(){
+  // Ensure both addresses have code on this chain
+  const codeDecl = await provider.getCode(DECLARATION_ADDR);
+  if(!codeDecl || codeDecl==="0x") throw new Error("No contract code at Declaration address on this network.");
+  const codeSbt = await provider.getCode(SBT_ADDR);
+  if(!codeSbt || codeSbt==="0x") throw new Error("No contract code at SBT address on this network.");
+}
 
 /* =================== CONTRACT HELPERS (with retries) =================== */
 async function getSigneeNumberViaLogs(addr){
@@ -181,7 +228,6 @@ async function getSigneeNumberViaLogs(addr){
   const latest=await provider.getBlockNumber();
   const STEP=8000;
   let from=DECLARATION_DEPLOY_BLOCK, to=Math.min(latest, from+STEP);
-
   while(from<=latest){
     const logs=await provider.getLogs({
       address:DECLARATION_ADDR, fromBlock:from, toBlock:to,
@@ -231,8 +277,17 @@ async function pollTokenIdOf(addr, tries=8, delayMs=1200){
 async function fetchTokenURIWithRetry(sbt, tokenId, tries=12, delayMs=1200){
   let lastErr;
   for(let i=0;i<tries;i++){
-    try{ return await sbt.tokenURI(tokenId); }
-    catch(e){ lastErr=e; await new Promise(r=>setTimeout(r,delayMs)); }
+    try{
+      const uri = await sbt.tokenURI(tokenId);
+      // Basic support for both data: and http(s)/ipfs
+      if (uri?.startsWith("data:application/json")) {
+        const base64 = uri.split(",")[1] || "";
+        return JSON.parse(atob(base64));
+      } else {
+        const res = await fetch(uri.replace("ipfs://","https://ipfs.io/ipfs/"));
+        return await res.json();
+      }
+    } catch(e) { lastErr=e; await new Promise(r=>setTimeout(r,delayMs)); }
   }
   throw lastErr || new Error("tokenURI not available yet");
 }
@@ -243,7 +298,6 @@ async function connect(){
     // If no chosen provider yet, open chooser first
     const savedKey = localStorage.getItem(LS_KEY);
     if (!selectedProvider){
-      // try to resolve saved
       let list = discovered.length ? discovered : buildFallbackList();
       const found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
       if (found) {
@@ -259,17 +313,32 @@ async function connect(){
     signer   = provider.getSigner();
     user     = await signer.getAddress();
 
-    const chain = await readChainId(selectedProvider);
+    // Chain handling
+    let chain = await readChainId(selectedProvider);
     onCorrectChain = chain === CHAIN_ID_HEX;
+    if(!onCorrectChain){
+      setBanner(true,"Switch your wallet to Base Sepolia (84532). Attempting to switch now.");
+      await attemptSwitchNetwork().catch(()=>{});
+      chain = await readChainId(selectedProvider).catch(()=>chain);
+      onCorrectChain = chain === CHAIN_ID_HEX;
+    }
     setStatus(`Connected: ${user.slice(0,6)}…${user.slice(-4)} • Chain: ${chain}`);
 
-    // Wrong network UX: banner + disabled button; no retry button.
     if(!onCorrectChain){
       setBanner(true,"Switch your wallet to Base Sepolia (84532). This page will update automatically once you switch.");
       setButton(STATE.WRONG_NETWORK);
       return;
     }
     setBanner(false);
+
+    // Preflight: confirm code exists at both addresses
+    try{
+      await preflightContracts();
+    }catch(preErr){
+      setStatus(preErr.message);
+      setButton(STATE.DISCONNECTED);
+      return;
+    }
 
     const declaration=new ethers.Contract(DECLARATION_ADDR,DECLARATION_ABI,signer);
     const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
@@ -278,8 +347,7 @@ async function connect(){
     try{
       const tid=await sbt.tokenIdOf(user);
       if(tid && !ethers.BigNumber.from(tid).isZero()){
-        const uri=await fetchTokenURIWithRetry(sbt, tid);
-        const data=JSON.parse(atob(uri.split(",")[1]));
+        const data=await fetchTokenURIWithRetry(sbt, tid);
         showNftTile(data.image);
         $("finalName").textContent=data.name||"";
         $("links").style.display="flex";
@@ -313,7 +381,7 @@ async function connect(){
 
   }catch(err){
     console.error(err);
-    setStatus(err?.error?.message||err?.data?.message||err.message||"Connection failed");
+    setStatus(rpcMessage(err));
     setButton(STATE.DISCONNECTED);
   }
 }
@@ -330,12 +398,17 @@ async function onPrimaryClick(){
     const chosen=$("name").value.trim();
     if(!/^[a-z0-9-]{1,14}$/.test(chosen)){ setStatus("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'"); return; }
 
+    // Pre-check declaration to surface revert reasons
     setButton(STATE.PENDING_SIGN);
     setStatus("Checking signature…");
     const already = await declaration.hasSigned(user);
     if(!already){
+      // callStatic to catch reverts before estimateGas
+      try{ await declaration.callStatic.cosignDeclaration(chosen); }
+      catch(e){ throw new Error("Declaration revert: " + rpcMessage(e)); }
+
       setStatus("Signing the Declaration…");
-      const tx = await declaration.cosignDeclaration(chosen);
+      const tx = await declaration.cosignDeclaration(chosen, { /* gasLimit: 200000 */ });
       const rc = await tx.wait();
       setStatus(`Signed. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc.transactionHash}">View on BaseScan</a>`);
       $("name").disabled = true;
@@ -345,14 +418,18 @@ async function onPrimaryClick(){
     setButton(STATE.PENDING_MINT);
     setStatus("Minting your soulbound NFT…");
     const signeeNumber = await getSigneeNumberWithRetry(user, 6, 1500);
-    const tx2 = await sbt.claimWithSignee(signeeNumber);
+
+    // Pre-check mint to surface revert reasons
+    try{ await sbt.callStatic.claimWithSignee(signeeNumber); }
+    catch(e){ throw new Error("Mint revert: " + rpcMessage(e)); }
+
+    const tx2 = await sbt.claimWithSignee(signeeNumber, { gasLimit: 300000 });
     const rc2 = await tx2.wait();
 
     let tokenId = await getMintedTokenIdFromReceipt(rc2);
     if(!tokenId) tokenId = await pollTokenIdOf(user);
 
-    const uri  = await fetchTokenURIWithRetry(sbt, tokenId, 12, 1200);
-    const data = JSON.parse(atob(uri.split(",")[1]));
+    const data = await fetchTokenURIWithRetry(sbt, tokenId, 12, 1200);
 
     showNftTile(data.image);
     $("finalName").textContent = data.name || "";
@@ -364,7 +441,7 @@ async function onPrimaryClick(){
 
   }catch(err){
     console.error(err);
-    setStatus(err?.error?.message||err?.data?.message||err.message||"Something went wrong");
+    setStatus(rpcMessage(err));
     setButton(STATE.READY);
   }
 }
@@ -383,7 +460,6 @@ function attachWalletListeners(p){
     const ok=(cid||"").toLowerCase()===CHAIN_ID_HEX;
     if(ok){
       setBanner(false);
-      // If connected, re-run connect flow to refresh state
       if (user) { await connect(); }
     } else {
       setBanner(true,"Switch your wallet to Base Sepolia (84532). This page will update automatically once you switch.");
@@ -391,7 +467,6 @@ function attachWalletListeners(p){
     }
   });
 }
-// Also handle browsers that don’t emit chainChanged reliably
 window.addEventListener("visibilitychange", async ()=>{
   if(document.visibilityState==="visible" && selectedProvider && user){
     try{
