@@ -6,24 +6,25 @@
 <title>i_am_dave — Mint (Base Sepolia)</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#2B2B2B; --fg:#F3F3F3; }
+  :root { --bg:#2B2B2B; --fg:#F3F3F3; --panel:#1f1f1f; --border:#3a3a3a; }
   html,body { margin:0; padding:0; background:var(--bg); color:var(--fg); font-family:"JetBrains Mono", monospace; }
   .wrap { max-width: 560px; margin: 0 auto; padding: 24px; display:flex; flex-direction:column; gap:16px; }
   h1 { font-size:18px; margin:0 0 6px; }
-  .card { background:#1f1f1f; border:1px solid #3a3a3a; border-radius:12px; padding:16px; }
-  .row { display:flex; gap:8px; align-items:center; }
-  .input { flex:1; background:#151515; border:1px solid #3a3a3a; color:var(--fg); border-radius:10px; padding:12px 14px; font-family:inherit; font-size:16px; }
-  .btn { background:#0c0c0c; border:1px solid #3a3a3a; color:var(--fg); border-radius:10px; padding:12px 16px; font-size:16px; cursor:pointer; white-space:nowrap; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .input { flex:1; background:#151515; border:1px solid var(--border); color:var(--fg); border-radius:10px; padding:12px 14px; font-family:inherit; font-size:16px; }
+  .btn { background:#0c0c0c; border:1px solid var(--border); color:var(--fg); border-radius:10px; padding:12px 16px; font-size:16px; cursor:pointer; white-space:nowrap; }
   .btn:disabled { opacity:.5; cursor:not-allowed; }
   .hint { font-size:12px; opacity:.85; }
-  .nft { width:100%; aspect-ratio:1/1; background:#2B2B2B; border:1px solid #3a3a3a; border-radius:12px; display:grid; place-items:center; }
+  .nft { width:100%; aspect-ratio:1/1; background:#2B2B2B; border:1px solid var(--border); border-radius:12px; display:grid; place-items:center; }
   .share { display:flex; gap:10px; flex-wrap:wrap; }
   a.link { color: var(--fg); text-decoration: underline; }
+  .banner { background:#3a2b2b; border:1px solid #6b3a3a; color:#f3e6e6; padding:10px 12px; border-radius:8px; display:none; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 <script>
-  // ---- CONFIG (Base Sepolia) ----
-  const CHAIN_ID_HEX = "0x14A34"; // 84532
+  // -------- CONFIG: Base Sepolia --------
+  const CHAIN_ID_HEX = "0x14a34"; // 84532
   const EXPLORER = "https://sepolia.basescan.org";
   const DECLARATION_ADDR = "0xB0731E7ea189c169640Fd890E5dcE9811040D0eA";
   const SBT_ADDR          = "0xe255130A9e2277640d3DfB045075a38d63a34D06";
@@ -41,92 +42,113 @@
     "function tokenURI(uint256) view returns (string)"
   ];
 
+  // -------- State --------
   let provider, signer, user;
+  let onCorrectChain = false;
 
   const $ = (id) => document.getElementById(id);
 
+  function setStatus(msg) { $("status").innerHTML = msg; }
+  function setBanner(show, msg) {
+    const b = $("banner");
+    if (show) { b.style.display = "block"; b.textContent = msg; }
+    else { b.style.display = "none"; b.textContent = ""; }
+  }
+  function setMintEnabled(ok) { $("mint").disabled = !ok; }
+
   function updatePreview() {
-    const v = $('name').value.trim();
-    $('previewText').textContent = v ? `i_am_${v}_dave` : "i_am_(yourName)_dave";
+    const v = $("name").value.trim();
+    $("previewText").textContent = v ? `i_am_${v}_dave` : "i_am_(yourName)_dave";
   }
 
-  async function requestAccounts() {
-    return window.ethereum.request({ method:"eth_requestAccounts" });
-  }
-
-  async function ensureBaseSepolia() {
-    const chainId = await window.ethereum.request({ method:"eth_chainId" });
-    if (chainId.toLowerCase() === CHAIN_ID_HEX.toLowerCase()) return;
-
-    // Try switch
-    try {
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: CHAIN_ID_HEX }]
-      });
-      return;
-    } catch (e) {
-      // If chain not added, try add
-      if (e && (e.code === 4902 || /not added/i.test(e.message || ""))) {
-        try {
-          await window.ethereum.request({
-            method: "wallet_addEthereumChain",
-            params: [{
-              chainId: CHAIN_ID_HEX,
-              chainName: "Base Sepolia",
-              nativeCurrency: { name:"Ether", symbol:"ETH", decimals:18 },
-              rpcUrls: ["https://sepolia.base.org"],
-              blockExplorerUrls: [EXPLORER]
-            }]
-          });
-          return;
-        } catch (e2) {
-          // fall through to manual message
-        }
-      }
-      // If switch method not supported or user rejected, show manual instructions
-      throw new Error("Please switch your wallet network to Base Sepolia (chainId 84532), then click Retry.");
-    }
+  async function readChainId() {
+    const id = await window.ethereum.request({ method: "eth_chainId" });
+    return (id || "").toLowerCase();
   }
 
   async function connect() {
     try {
       if (!window.ethereum) {
-        $('status').innerHTML = 'No wallet detected. Install <a class="link" href="https://metamask.io" target="_blank">MetaMask</a> or open with a wallet that supports WalletConnect.';
+        setStatus('No wallet detected. Install <a class="link" href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a> or use a wallet extension.');
         return;
       }
 
-      await requestAccounts(); // triggers wallet connect
+      await window.ethereum.request({ method:"eth_requestAccounts" });
+
       provider = new ethers.providers.Web3Provider(window.ethereum, "any");
       signer   = provider.getSigner();
       user     = await signer.getAddress();
 
-      try {
-        await ensureBaseSepolia();
-      } catch (e) {
-        $('status').textContent = e.message;
-        $('retry').style.display = "inline-block";
-        return;
-      }
+      // chain check (no auto-switching)
+      const chain = await readChainId();
+      onCorrectChain = chain === CHAIN_ID_HEX;
 
-      $('status').textContent = `Connected: ${user.slice(0,6)}…${user.slice(-4)} on Base Sepolia`;
-      $('connect').disabled = true;
-      $('mint').disabled = false;
-      $('retry').style.display = "none";
+      $("connect").disabled = false; // keep enabled so user can reconnect if needed
+      setStatus(`Connected: ${user.slice(0,6)}…${user.slice(-4)} • Chain: ${chain}`);
+
+      if (onCorrectChain) {
+        setBanner(false);
+        setMintEnabled(true);
+      } else {
+        setMintEnabled(false);
+        setBanner(true, "Switch your wallet to Base Sepolia (84532), then press Retry.");
+        $("retry").style.display = "inline-block";
+      }
 
     } catch (err) {
       console.error(err);
-      $('status').textContent = err?.error?.message || err?.data?.message || err.message || "Connection failed";
+      setStatus(err?.error?.message || err?.data?.message || err.message || "Connection failed");
     }
   }
 
-  // Event log lookup for signee number
+  async function retryChainCheck() {
+    try {
+      const chain = await readChainId();
+      onCorrectChain = chain === CHAIN_ID_HEX;
+      setStatus(`Connected: ${user ? user.slice(0,6)+"…"+user.slice(-4) : "—"} • Chain: ${chain}`);
+      if (onCorrectChain) {
+        setBanner(false);
+        $("retry").style.display = "none";
+        setMintEnabled(true);
+      } else {
+        setMintEnabled(false);
+        setBanner(true, "Still not on Base Sepolia (84532). Switch in your wallet, then press Retry.");
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus(err?.message || "Retry failed");
+    }
+  }
+
+  // Listen for wallet changes and react
+  function attachWalletListeners() {
+    if (!window.ethereum) return;
+    window.ethereum.on?.("accountsChanged", async (accounts) => {
+      user = (accounts && accounts[0]) ? accounts[0] : undefined;
+      setStatus(user ? `Account: ${user.slice(0,6)}…${user.slice(-4)}` : "Disconnected");
+      setMintEnabled(false);
+    });
+    window.ethereum.on?.("chainChanged", async (_chainId) => {
+      onCorrectChain = (_chainId || "").toLowerCase() === CHAIN_ID_HEX;
+      if (onCorrectChain) {
+        setBanner(false);
+        $("retry").style.display = "none";
+        setMintEnabled(!!user);
+      } else {
+        setMintEnabled(false);
+        setBanner(true, "Switch your wallet to Base Sepolia (84532), then press Retry.");
+        $("retry").style.display = "inline-block";
+      }
+    });
+  }
+
+  // Pull signee number from event logs (indexed by address)
   async function getSigneeNumberViaLogs(addr) {
     const iface  = new ethers.utils.Interface(DECLARATION_ABI);
     const topic0 = iface.getEventTopic("DeclarationSigned");
     const filter = {
       address: DECLARATION_ADDR,
-      fromBlock: 0,
+      fromBlock: 0,           // can be narrowed to the Declaration deployment block for performance
       toBlock: "latest",
       topics: [topic0, ethers.utils.hexZeroPad(addr, 32)]
     };
@@ -138,41 +160,54 @@
 
   async function handleMint() {
     try {
-      $('mint').disabled = true;
-      $('status').textContent = "Preparing…";
+      if (!provider || !signer || !user) { setStatus("Connect your wallet first."); return; }
+      if (!onCorrectChain) { setStatus("Switch your wallet to Base Sepolia (84532) and press Retry."); return; }
+
+      $("mint").disabled = true;
+      setStatus("Preparing…");
 
       const declaration = new ethers.Contract(DECLARATION_ADDR, DECLARATION_ABI, signer);
       const sbt         = new ethers.Contract(SBT_ADDR, SBT_ABI, signer);
 
-      // If not signed, sign
+      // If already minted, just load
+      try {
+        const existingId = await sbt.tokenIdOf(user);
+        if (existingId && !ethers.BigNumber.from(existingId).isZero()) {
+          setStatus("You already minted. Loading your NFT…");
+          await showNft(sbt, existingId);
+          return;
+        }
+      } catch {/* ignore and continue */}
+
+      // If not signed, sign first
       const hasSigned = await declaration.hasSigned(user);
       if (!hasSigned) {
-        const chosen = $('name').value.trim();
+        const chosen = $("name").value.trim();
         if (!/^[a-z0-9-]{1,14}$/.test(chosen)) {
           throw new Error("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'");
         }
-        $('status').textContent = "Signing the Declaration…";
+        setStatus("Signing the Declaration…");
         const tx = await declaration.cosignDeclaration(chosen);
         const rc = await tx.wait();
-        $('status').innerHTML = `Signed. <a class="link" href="${EXPLORER}/tx/${rc.transactionHash}" target="_blank">View on BaseScan</a>`;
+        setStatus(`Signed. <a class="link" href="${EXPLORER}/tx/${rc.transactionHash}" target="_blank" rel="noopener">View on BaseScan</a>`);
       }
 
       // Mint
-      $('status').textContent = "Fetching your signee number…";
+      setStatus("Fetching your signee number…");
       const signeeNumber = await getSigneeNumberViaLogs(user);
 
-      $('status').textContent = "Minting your soulbound NFT…";
+      setStatus("Minting your soulbound NFT…");
       const tx2 = await sbt.claimWithSignee(signeeNumber);
       const rc2 = await tx2.wait();
-      $('status').innerHTML = `Minted. <a class="link" href="${EXPLORER}/tx/${rc2.transactionHash}" target="_blank">View on BaseScan</a>`;
+      setStatus(`Minted. <a class="link" href="${EXPLORER}/tx/${rc2.transactionHash}" target="_blank" rel="noopener">View on BaseScan</a>`);
 
       const tokenId = await sbt.tokenIdOf(user);
       await showNft(sbt, tokenId);
 
     } catch (err) {
       console.error(err);
-      $('status').textContent = err?.error?.message || err?.data?.message || err.message || "Something went wrong";
-      $('mint').disabled = false;
+      setStatus(err?.error?.message || err?.data?.message || err.message || "Something went wrong");
+      $("mint").disabled = false;
     }
   }
 
@@ -181,26 +216,27 @@
     const json = atob(uri.split(",")[1]);
     const data = JSON.parse(json);
 
-    $('nftTitle').textContent = data.name;
-    $('nftImg').src = data.image;
+    $("nftTitle").textContent = data.name;
+    $("nftImg").src = data.image;
 
     const opensea = `https://testnets.opensea.io/assets/base-sepolia/${SBT_ADDR}/${tokenId}`;
-    $('opensea').href = opensea;
+    $("opensea").href = opensea;
 
     const shareText = encodeURIComponent("I co-signed THE DECLARATION OF THE DAVES. The Banksy stays on the wall.");
-    $('xshare').href  = `https://twitter.com/intent/tweet?text=${shareText}&url=${encodeURIComponent(opensea)}`;
-    $('fcshare').href = `https://warpcast.com/~/compose?text=${shareText}&embeds[]=${encodeURIComponent(opensea)}`;
+    $("xshare").href  = `https://twitter.com/intent/tweet?text=${shareText}&url=${encodeURIComponent(EXPLORER)}`;
+    $("fcshare").href = `https://warpcast.com/~/compose?text=${shareText}`;
 
-    $('result').style.display = "block";
-    $('mint').disabled = true;
+    $("result").style.display = "block";
+    $("mint").disabled = true;
   }
 
   window.addEventListener("DOMContentLoaded", () => {
-    $('connect').onclick = connect;
-    $('retry').onclick   = connect;
-    $('mint').onclick    = handleMint;
-    $('name').addEventListener("input", updatePreview);
+    $("connect").onclick = connect;
+    $("retry").onclick   = retryChainCheck;
+    $("mint").onclick    = handleMint;
+    $("name").addEventListener("input", updatePreview);
     updatePreview();
+    attachWalletListeners();
   });
 </script>
 </head>
@@ -213,15 +249,21 @@
         <button class="btn" id="connect">Connect wallet</button>
         <button class="btn" id="retry" style="display:none;">Retry</button>
       </div>
+
+      <div id="banner" class="banner"></div>
+
       <div class="row" style="margin-top:12px;">
         <input id="name" class="input" maxlength="14" placeholder="yourname"
                pattern="[a-z0-9\-]{1,14}" title="lowercase letters, numbers, hyphen only" />
         <button class="btn" id="mint" disabled>Mint</button>
       </div>
+
       <div class="hint">Format: i_am_(yourName)_dave • 1–14 chars • a–z, 0–9, -</div>
+
       <div class="nft" style="margin-top:12px;">
         <div id="previewText" style="font-size:24px; color:#F3F3F3;"></div>
       </div>
+
       <div id="status" class="hint" style="margin-top:10px;"></div>
     </div>
 
