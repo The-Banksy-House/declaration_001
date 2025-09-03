@@ -78,6 +78,7 @@ let discovered = [];                    // [{provider, info}]
 const LS_KEY = "dave_wallet_choice";    // remembered uuid/rdns
 
 let provider, signer, user, onCorrectChain=false;
+let autoConnectAfterChoose = false;
 
 /* =================== DOM HELPERS =================== */
 const $ = id => document.getElementById(id);
@@ -116,7 +117,6 @@ function decodeErrorData(data){
   try{
     const hex = typeof data === "string" ? data : data?.data || "";
     if (typeof hex === "string" && hex.startsWith("0x08c379a0")) {
-      // Error(string): strip selector and decode
       const reason = ethers.utils.defaultAbiCoder.decode(["string"], "0x"+hex.slice(10));
       return reason?.[0];
     }
@@ -163,7 +163,8 @@ function buildFallbackList(){
 }
 
 /* ====== Chooser opens only when CONNECT is clicked ====== */
-function openChooser(){
+function openChooser(autoconnect=false){
+  autoConnectAfterChoose = autoconnect;
   let list = discovered.length ? discovered : buildFallbackList();
   const grid = $("chooserList");
   grid.innerHTML = "";
@@ -191,9 +192,18 @@ function useProvider(detail, remember){
     localStorage.setItem(LS_KEY, key);
   }
   $("chosenLabel").textContent = detail.info?.name || "Wallet";
-  closeChooser();
   attachWalletListeners(selectedProvider);
-  setStatus("Wallet selected. Click CONNECT WALLET again to connect.");
+  closeChooser();
+  if (autoConnectAfterChoose) {
+    autoConnectAfterChoose = false;
+    connect().catch(err=>{
+      console.error(err);
+      setStatus(rpcMessage(err));
+      setButton(STATE.DISCONNECTED);
+    });
+  } else {
+    setStatus("Wallet selected. Click CONNECT WALLET to proceed.");
+  }
 }
 
 /* =================== CHAIN / RPC HELPERS =================== */
@@ -214,7 +224,6 @@ async function attemptSwitchNetwork(){
   return false;
 }
 async function preflightContracts(){
-  // Ensure both addresses have code on this chain
   const codeDecl = await provider.getCode(DECLARATION_ADDR);
   if(!codeDecl || codeDecl==="0x") throw new Error("No contract code at Declaration address on this network.");
   const codeSbt = await provider.getCode(SBT_ADDR);
@@ -279,7 +288,6 @@ async function fetchTokenURIWithRetry(sbt, tokenId, tries=12, delayMs=1200){
   for(let i=0;i<tries;i++){
     try{
       const uri = await sbt.tokenURI(tokenId);
-      // Basic support for both data: and http(s)/ipfs
       if (uri?.startsWith("data:application/json")) {
         const base64 = uri.split(",")[1] || "";
         return JSON.parse(atob(base64));
@@ -295,7 +303,7 @@ async function fetchTokenURIWithRetry(sbt, tokenId, tries=12, delayMs=1200){
 /* =================== CONNECT / FLOW =================== */
 async function connect(){
   try{
-    // If no chosen provider yet, open chooser first
+    // If no chosen provider yet, resolve saved or open chooser
     const savedKey = localStorage.getItem(LS_KEY);
     if (!selectedProvider){
       let list = discovered.length ? discovered : buildFallbackList();
@@ -303,7 +311,7 @@ async function connect(){
       if (found) {
         useProvider(found, false);
       } else {
-        openChooser(); // lazy open on click
+        openChooser(true); // auto-connect after pick
         return;
       }
     }
@@ -356,7 +364,7 @@ async function connect(){
         setButton(STATE.MINTED);
         return;
       }
-    }catch{/* not minted */}
+    }catch{}
 
     // Already signed?
     let signed=false;
@@ -387,8 +395,11 @@ async function connect(){
 }
 
 async function onPrimaryClick(){
-  if(appState===STATE.DISCONNECTED) return connect();
-  if(appState===STATE.WRONG_NETWORK) return; // wait for auto-detect after user switches
+  if(appState===STATE.DISCONNECTED){
+    if (!selectedProvider) { openChooser(true); return; }
+    return connect();
+  }
+  if(appState===STATE.WRONG_NETWORK) return;
   if(appState!==STATE.READY) return;
 
   try{
@@ -398,17 +409,15 @@ async function onPrimaryClick(){
     const chosen=$("name").value.trim();
     if(!/^[a-z0-9-]{1,14}$/.test(chosen)){ setStatus("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'"); return; }
 
-    // Pre-check declaration to surface revert reasons
     setButton(STATE.PENDING_SIGN);
     setStatus("Checking signature…");
     const already = await declaration.hasSigned(user);
     if(!already){
-      // callStatic to catch reverts before estimateGas
       try{ await declaration.callStatic.cosignDeclaration(chosen); }
       catch(e){ throw new Error("Declaration revert: " + rpcMessage(e)); }
 
       setStatus("Signing the Declaration…");
-      const tx = await declaration.cosignDeclaration(chosen, { /* gasLimit: 200000 */ });
+      const tx = await declaration.cosignDeclaration(chosen);
       const rc = await tx.wait();
       setStatus(`Signed. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc.transactionHash}">View on BaseScan</a>`);
       $("name").disabled = true;
@@ -419,7 +428,6 @@ async function onPrimaryClick(){
     setStatus("Minting your soulbound NFT…");
     const signeeNumber = await getSigneeNumberWithRetry(user, 6, 1500);
 
-    // Pre-check mint to surface revert reasons
     try{ await sbt.callStatic.claimWithSignee(signeeNumber); }
     catch(e){ throw new Error("Mint revert: " + rpcMessage(e)); }
 
@@ -485,13 +493,11 @@ window.addEventListener("DOMContentLoaded",()=>{
     localStorage.removeItem(LS_KEY);
     selectedProvider=null;
     $("chosenLabel").textContent="—";
-    openChooser();
+    openChooser(true); // pick new wallet and auto-connect
   };
   $("name").addEventListener("input",normalizeInput);
   showPreviewTile(); updatePreview();
-
-  // Passive discovery on load (no UI)
-  startDiscovery();
+  startDiscovery(); // passive discovery on load
 });
 </script>
 </head>
@@ -534,7 +540,7 @@ window.addEventListener("DOMContentLoaded",()=>{
     <div class="hint">Declaration: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA • SBT: 0xe255130A9e2277640d3DfB045075a38d63a34D06 • Base Sepolia</div>
   </div>
 
-  <!-- Wallet chooser modal; opens only when CONNECT WALLET is clicked -->
+  <!-- Wallet chooser modal; opens on demand -->
   <div id="overlay" class="overlay" role="dialog" aria-modal="true">
     <div class="modal">
       <h2>Select a wallet</h2>
