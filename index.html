@@ -23,7 +23,8 @@
 <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 <script>
   // ---- CONFIG (Base Sepolia) ----
-  const CHAIN_ID_HEX = "0x14A74"; // 84532
+  const CHAIN_ID_DEC = 84532;
+  const CHAIN_ID_HEX = "0x14A34"; // correct Base Sepolia chainId
   const EXPLORER = "https://sepolia.basescan.org";
   const DECLARATION_ADDR = "0xB0731E7ea189c169640Fd890E5dcE9811040D0eA";
   const SBT_ADDR          = "0xe255130A9e2277640d3DfB045075a38d63a34D06";
@@ -41,68 +42,70 @@
     "function tokenURI(uint256) view returns (string)"
   ];
 
-  let provider, web3, signer, user;
+  let provider, signer, user;
 
   function $(id){ return document.getElementById(id); }
-
-  async function ensureWallet() {
-    if (!window.ethereum) {
-      $('status').innerHTML = 'No wallet detected. Open this page inside your wallet browser, or install MetaMask.';
-      throw new Error('No injected wallet');
-    }
-  }
-
-  async function switchToBaseSepolia() {
-    try {
-      await window.ethereum.request({ method:"wallet_switchEthereumChain", params:[{ chainId: CHAIN_ID_HEX }] });
-    } catch (e) {
-      if (e.code === 4902) {
-        await window.ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId: CHAIN_ID_HEX,
-            chainName: "Base Sepolia",
-            nativeCurrency: { name:"Ether", symbol:"ETH", decimals:18 },
-            rpcUrls: ["https://sepolia.base.org"],
-            blockExplorerUrls: [EXPLORER]
-          }]
-        });
-      } else { throw e; }
-    }
-  }
-
-  async function connect() {
-    try {
-      await ensureWallet();
-      await switchToBaseSepolia();
-
-      await window.ethereum.request({ method:"eth_requestAccounts" });
-
-      provider = new ethers.providers.Web3Provider(window.ethereum, "any");
-      web3 = provider; // alias
-      signer = provider.getSigner();
-      user = await signer.getAddress();
-
-      $('status').textContent = `Connected: ${user.slice(0,6)}…${user.slice(-4)} on Base Sepolia`;
-      $('connect').disabled = true;
-      $('mint').disabled = false;
-    } catch (err) {
-      console.error(err);
-      $('status').textContent = err?.message || 'Connection failed';
-    }
-  }
 
   function updatePreview() {
     const v = $('name').value.trim();
     $('previewText').textContent = v ? `i_am_${v}_dave` : "i_am_(yourName)_dave";
   }
 
+  async function connect() {
+    try {
+      if (!window.ethereum) {
+        $('status').innerHTML = 'No wallet detected. Install <a class="link" href="https://metamask.io" target="_blank">MetaMask</a> or use WalletConnect.';
+        return;
+      }
+
+      // 1) Request accounts first (this triggers the wallet)
+      await window.ethereum.request({ method:"eth_requestAccounts" });
+
+      provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+      signer   = provider.getSigner();
+      user     = await signer.getAddress();
+
+      // 2) Ensure chain is Base Sepolia
+      const currentChain = await window.ethereum.request({ method:"eth_chainId" });
+      if (currentChain.toLowerCase() !== CHAIN_ID_HEX.toLowerCase()) {
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: CHAIN_ID_HEX }]
+          });
+        } catch (e) {
+          if (e.code === 4902) {
+            await window.ethereum.request({
+              method: "wallet_addEthereumChain",
+              params: [{
+                chainId: CHAIN_ID_HEX,
+                chainName: "Base Sepolia",
+                nativeCurrency: { name:"Ether", symbol:"ETH", decimals:18 },
+                rpcUrls: ["https://sepolia.base.org"],
+                blockExplorerUrls: [EXPLORER]
+              }]
+            });
+          } else { throw e; }
+        }
+      }
+
+      $('status').textContent = `Connected: ${user.slice(0,6)}…${user.slice(-4)} on Base Sepolia`;
+      $('connect').disabled = true;
+      $('mint').disabled = false;
+
+    } catch (err) {
+      console.error(err);
+      $('status').textContent = err?.error?.message || err?.data?.message || err.message || "Connection failed";
+    }
+  }
+
+  // Pull your signee number from logs (indexed by your address)
   async function getSigneeNumberViaLogs(addr) {
     const iface  = new ethers.utils.Interface(DECLARATION_ABI);
     const topic0 = iface.getEventTopic("DeclarationSigned");
     const filter = {
       address: DECLARATION_ADDR,
-      fromBlock: 0,
+      fromBlock: 0,           // optionally set to Declaration deploy block to reduce RPC load
       toBlock: "latest",
       topics: [topic0, ethers.utils.hexZeroPad(addr, 32)]
     };
@@ -120,7 +123,14 @@
       const declaration = new ethers.Contract(DECLARATION_ADDR, DECLARATION_ABI, signer);
       const sbt         = new ethers.Contract(SBT_ADDR, SBT_ABI, signer);
 
-      // Step 1: sign if needed
+      // If already minted, show NFT
+      const existingId = await sbt.tokenIdOf(user);
+      if (existingId && existingId.toString() !== "0") {
+        $('status').textContent = "You already minted. Loading your NFT…";
+        return showNft(sbt, existingId);
+      }
+
+      // If not signed, sign first
       const hasSigned = await declaration.hasSigned(user);
       if (!hasSigned) {
         const chosen = $('name').value.trim();
@@ -133,7 +143,7 @@
         $('status').innerHTML = `Signed. <a class="link" href="${EXPLORER}/tx/${rc.transactionHash}" target="_blank">View on BaseScan</a>`;
       }
 
-      // Step 2: get your signee number and mint
+      // Get signee number and mint
       $('status').textContent = "Fetching your signee number…";
       const signeeNumber = await getSigneeNumberViaLogs(user);
 
@@ -142,29 +152,33 @@
       const rc2 = await tx2.wait();
       $('status').innerHTML = `Minted. <a class="link" href="${EXPLORER}/tx/${rc2.transactionHash}" target="_blank">View on BaseScan</a>`;
 
-      // Display NFT
       const tokenId = await sbt.tokenIdOf(user);
-      const uri     = await sbt.tokenURI(tokenId);
-      const json    = atob(uri.split(",")[1]);
-      const data    = JSON.parse(json);
-      $('nftTitle').textContent = data.name;
-      $('nftImg').src = data.image;
-
-      const opensea = `https://testnets.opensea.io/assets/base-sepolia/${SBT_ADDR}/${tokenId}`;
-      $('opensea').href = opensea;
-
-      const shareText = encodeURIComponent("I co-signed THE DECLARATION OF THE DAVES. The Banksy stays on the wall.");
-      $('xshare').href  = `https://twitter.com/intent/tweet?text=${shareText}&url=${encodeURIComponent(opensea)}`;
-      $('fcshare').href = `https://warpcast.com/~/compose?text=${shareText}&embeds[]=${encodeURIComponent(opensea)}`;
-
-      $('result').style.display = "block";
-      $('mint').disabled = true;
+      await showNft(sbt, tokenId);
 
     } catch (err) {
       console.error(err);
       $('status').textContent = err?.error?.message || err?.data?.message || err.message || "Something went wrong";
       $('mint').disabled = false;
     }
+  }
+
+  async function showNft(sbt, tokenId) {
+    const uri  = await sbt.tokenURI(tokenId);
+    const json = atob(uri.split(",")[1]);
+    const data = JSON.parse(json);
+
+    $('nftTitle').textContent = data.name;
+    $('nftImg').src = data.image;
+
+    const opensea = `https://testnets.opensea.io/assets/base-sepolia/${SBT_ADDR}/${tokenId}`;
+    $('opensea').href = opensea;
+
+    const shareText = encodeURIComponent("I co-signed THE DECLARATION OF THE DAVES. The Banksy stays on the wall.");
+    $('xshare').href  = `https://twitter.com/intent/tweet?text=${shareText}&url=${encodeURIComponent(opensea)}`;
+    $('fcshare').href = `https://warpcast.com/~/compose?text=${shareText}&embeds[]=${encodeURIComponent(opensea)}`;
+
+    $('result').style.display = "block";
+    $('mint').disabled = true;
   }
 
   window.addEventListener("DOMContentLoaded", () => {
