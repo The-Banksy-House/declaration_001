@@ -65,9 +65,9 @@ const SBT_ABI = [
 const STATE = { DISCONNECTED:"DISCONNECTED", WRONG_NETWORK:"WRONG_NETWORK", READY:"READY", PENDING_SIGN:"PENDING_SIGN", PENDING_MINT:"PENDING_MINT", MINTED:"MINTED" };
 let appState = STATE.DISCONNECTED;
 
-let selectedProvider = null;            // the chosen injected provider (EIP-6963 or fallback)
-let discovered = [];                    // [{provider, info}] via EIP-6963
-const LS_KEY = "dave_wallet_choice";    // store info.uuid if available, otherwise a synthetic id
+let selectedProvider = null;            // chosen provider (EIP-6963 or fallback)
+let discovered = [];                    // [{provider, info}]
+const LS_KEY = "dave_wallet_choice";    // remembered uuid/rdns
 
 let provider, signer, user, onCorrectChain=false;
 
@@ -103,22 +103,19 @@ function normalizeInput(e){
   updatePreview();
 }
 
-/* =================== EIP-6963 DISCOVERY =================== */
+/* =================== EIP-6963 DISCOVERY (passive on load) =================== */
 function startDiscovery(){
   discovered = [];
   window.addEventListener("eip6963:announceProvider", (event) => {
-    const detail = event.detail; // { info, provider }
-    // avoid duplicates by uuid or rdns
-    if (!discovered.some(d => (d.info?.uuid && d.info.uuid===detail.info.uuid) || (d.info?.rdns && d.info.rdns===detail.info.rdns))) {
-      discovered.push(detail);
+    const d = event.detail; // { info, provider }
+    // de-dup by uuid or rdns
+    if (!discovered.some(x => (x.info?.uuid && x.info.uuid===d.info.uuid) || (x.info?.rdns && x.info.rdns===d.info.rdns))) {
+      discovered.push(d);
     }
   });
-  // request announcements
   try { window.dispatchEvent(new Event("eip6963:requestProvider")); } catch {}
 }
-
 function buildFallbackList(){
-  // If no EIP-6963 support, try legacy multi-provider arrays
   const arr = [];
   const eth = window.ethereum;
   if (!eth) return arr;
@@ -140,28 +137,15 @@ function buildFallbackList(){
   return arr;
 }
 
-function openChooser(force=false){
-  // Decide: use saved choice or prompt
-  const saved = localStorage.getItem(LS_KEY);
-  if (!force && saved && discovered.length){
-    const found = discovered.find(d => d.info?.uuid===saved || d.info?.rdns===saved);
-    if (found){ useProvider(found); return; }
-  }
-  if (!force && saved && !discovered.length){
-    const fb = buildFallbackList();
-    const found = fb.find(d => d.info?.uuid===saved || d.info?.rdns===saved);
-    if (found){ useProvider(found); return; }
-  }
-
-  // Build list to show
+/* ====== Chooser opens only when CONNECT is clicked ====== */
+function openChooser(){
   let list = discovered.length ? discovered : buildFallbackList();
-  // If still empty, show message
   const grid = $("chooserList");
   grid.innerHTML = "";
   if (!list.length){
-    grid.innerHTML = `<div class="hint">No browser wallet detected. Install <a class="link" href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a> or enable your extension, then reload.</div>`;
+    grid.innerHTML = `<div class="hint">No browser wallet detected. Install <a class="link" href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a> or enable your extension, then reopen the chooser.</div>`;
   } else {
-    list.forEach((d, i) => {
+    list.forEach((d) => {
       const item = document.createElement("button");
       item.className = "prov";
       const icon = d.info?.icon || "";
@@ -175,19 +159,16 @@ function openChooser(force=false){
   $("overlay").style.display="flex";
 }
 function closeChooser(){ $("overlay").style.display="none"; }
-
-function useProvider(detail, remember=false){
+function useProvider(detail, remember){
   selectedProvider = detail.provider;
   if (remember){
     const key = detail.info?.uuid || detail.info?.rdns || "injected";
     localStorage.setItem(LS_KEY, key);
   }
-  closeChooser();
-  // Hook listeners to the chosen provider
-  attachWalletListeners(selectedProvider);
-  // Update UI
   $("chosenLabel").textContent = detail.info?.name || "Wallet";
-  setStatus("Wallet selected. Click CONNECT WALLET.");
+  closeChooser();
+  attachWalletListeners(selectedProvider);
+  setStatus("Wallet selected. Click CONNECT WALLET again to connect.");
 }
 
 /* =================== CHAIN / RPC HELPERS =================== */
@@ -245,7 +226,7 @@ async function pollTokenIdOf(addr, tries=8, delayMs=1200){
     }catch{}
     await new Promise(r=>setTimeout(r,delayMs));
   }
-  throw new Error("Token not visible yet; please Retry.");
+  throw new Error("Token not visible yet; switch back to the tab for a moment and it should appear.");
 }
 async function fetchTokenURIWithRetry(sbt, tokenId, tries=12, delayMs=1200){
   let lastErr;
@@ -259,7 +240,19 @@ async function fetchTokenURIWithRetry(sbt, tokenId, tries=12, delayMs=1200){
 /* =================== CONNECT / FLOW =================== */
 async function connect(){
   try{
-    if(!selectedProvider){ openChooser(true); return; }
+    // If no chosen provider yet, open chooser first
+    const savedKey = localStorage.getItem(LS_KEY);
+    if (!selectedProvider){
+      // try to resolve saved
+      let list = discovered.length ? discovered : buildFallbackList();
+      const found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
+      if (found) {
+        useProvider(found, false);
+      } else {
+        openChooser(); // lazy open on click
+        return;
+      }
+    }
 
     await selectedProvider.request({method:"eth_requestAccounts"});
     provider = new ethers.providers.Web3Provider(selectedProvider, "any");
@@ -270,13 +263,13 @@ async function connect(){
     onCorrectChain = chain === CHAIN_ID_HEX;
     setStatus(`Connected: ${user.slice(0,6)}…${user.slice(-4)} • Chain: ${chain}`);
 
+    // Wrong network UX: banner + disabled button; no retry button.
     if(!onCorrectChain){
-      setBanner(true,"Switch your wallet to Base Sepolia (84532), then press Retry.");
-      $("retry").style.display="inline-block";
+      setBanner(true,"Switch your wallet to Base Sepolia (84532). This page will update automatically once you switch.");
       setButton(STATE.WRONG_NETWORK);
       return;
     }
-    setBanner(false); $("retry").style.display="none";
+    setBanner(false);
 
     const declaration=new ethers.Contract(DECLARATION_ADDR,DECLARATION_ABI,signer);
     const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
@@ -325,19 +318,9 @@ async function connect(){
   }
 }
 
-async function retryChainCheck(){
-  try{
-    const chain=await readChainId(selectedProvider);
-    onCorrectChain = chain === CHAIN_ID_HEX;
-    setStatus(`Connected: ${user?user.slice(0,6)+"…"+user.slice(-4):"—"} • Chain: ${chain}`);
-    if(onCorrectChain){ setBanner(false); $("retry").style.display="none"; showPreviewTile(); updatePreview(); setButton(STATE.READY); }
-    else { setBanner(true,"Still not on Base Sepolia (84532). Switch in your wallet, then press Retry."); setButton(STATE.WRONG_NETWORK); }
-  }catch(err){ console.error(err); setStatus(err?.message||"Retry failed"); }
-}
-
 async function onPrimaryClick(){
   if(appState===STATE.DISCONNECTED) return connect();
-  if(appState===STATE.WRONG_NETWORK) return;
+  if(appState===STATE.WRONG_NETWORK) return; // wait for auto-detect after user switches
   if(appState!==STATE.READY) return;
 
   try{
@@ -389,34 +372,51 @@ async function onPrimaryClick(){
 /* =================== LISTENERS =================== */
 function attachWalletListeners(p){
   if(!p) return;
-  p.removeAllListeners?.(); // some providers support it
+  p.removeAllListeners?.();
   p.on?.("accountsChanged",()=>{
     setButton(STATE.DISCONNECTED);
     $("name").disabled=false; $("signedBadge").style.display="none";
     showPreviewTile(); updatePreview(); $("links").style.display="none";
     setStatus("Account changed. Reconnect.");
   });
-  p.on?.("chainChanged",(cid)=>{
+  p.on?.("chainChanged", async (cid)=>{
     const ok=(cid||"").toLowerCase()===CHAIN_ID_HEX;
-    if(ok){ setBanner(false); $("retry").style.display="none"; }
-    else { setBanner(true,"Switch your wallet to Base Sepolia (84532), then press Retry."); setButton(STATE.WRONG_NETWORK); }
+    if(ok){
+      setBanner(false);
+      // If connected, re-run connect flow to refresh state
+      if (user) { await connect(); }
+    } else {
+      setBanner(true,"Switch your wallet to Base Sepolia (84532). This page will update automatically once you switch.");
+      setButton(STATE.WRONG_NETWORK);
+    }
   });
 }
+// Also handle browsers that don’t emit chainChanged reliably
+window.addEventListener("visibilitychange", async ()=>{
+  if(document.visibilityState==="visible" && selectedProvider && user){
+    try{
+      const chain = await readChainId(selectedProvider);
+      const ok = chain === CHAIN_ID_HEX;
+      if(ok && appState===STATE.WRONG_NETWORK){ setBanner(false); await connect(); }
+      if(!ok && appState!==STATE.WRONG_NETWORK){ setBanner(true,"Switch your wallet to Base Sepolia (84532)."); setButton(STATE.WRONG_NETWORK); }
+    }catch{}
+  }
+});
 
 /* =================== BOOT =================== */
 window.addEventListener("DOMContentLoaded",()=>{
-  // wire UI
   $("primary").onclick = onPrimaryClick;
-  $("retry").onclick   = retryChainCheck;
+  $("changeWallet").onclick = ()=>{
+    localStorage.removeItem(LS_KEY);
+    selectedProvider=null;
+    $("chosenLabel").textContent="—";
+    openChooser();
+  };
   $("name").addEventListener("input",normalizeInput);
-  $("changeWallet").onclick = ()=> openChooser(true);
   showPreviewTile(); updatePreview();
 
-  // discover providers, then open chooser if no remembered choice
+  // Passive discovery on load (no UI)
   startDiscovery();
-  // give a short tick for providers to announce
-  setTimeout(()=>openChooser(false), 200);
-
 });
 </script>
 </head>
@@ -448,10 +448,6 @@ window.addEventListener("DOMContentLoaded",()=>{
         <div id="previewText" style="font-size:24px;color:#F3F3F3;">i_am_(yourName)_dave</div>
       </div>
 
-      <div class="right" style="margin-top:6px;">
-        <button class="btn small" id="retry" style="display:none;">Retry</button>
-      </div>
-
       <div id="links" class="hint" style="display:none;margin-top:10px;">
         <a id="opensea" class="link" target="_blank" rel="noopener">OpenSea (may not load on testnet)</a>
       </div>
@@ -463,7 +459,7 @@ window.addEventListener("DOMContentLoaded",()=>{
     <div class="hint">Declaration: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA • SBT: 0xe255130A9e2277640d3DfB045075a38d63a34D06 • Base Sepolia</div>
   </div>
 
-  <!-- Wallet chooser modal -->
+  <!-- Wallet chooser modal; opens only when CONNECT WALLET is clicked -->
   <div id="overlay" class="overlay" role="dialog" aria-modal="true">
     <div class="modal">
       <h2>Select a wallet</h2>
