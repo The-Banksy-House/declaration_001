@@ -112,23 +112,23 @@
       const declaration=new ethers.Contract(DECLARATION_ADDR,DECLARATION_ABI,signer);
       const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
 
-      // If already minted, render NFT
+      // Already minted?
       try{
         const tid=await sbt.tokenIdOf(user);
         if(tid && !ethers.BigNumber.from(tid).isZero()){
-          const uri=await sbt.tokenURI(tid);
+          const uri=await fetchTokenURIWithRetry(sbt, tid);
           const data=JSON.parse(atob(uri.split(",")[1]));
           showNftTile(data.image);
           $("finalName").textContent=data.name||"";
           $("links").style.display="flex";
           $("name").disabled=true;
-          $("signedBadge").style.display="inline-block"; // minted implies signed
+          $("signedBadge").style.display="inline-block";
           setButton(STATE.MINTED);
           return;
         }
       }catch{/* not minted */}
 
-      // Check if already SIGNED (but not minted)
+      // Already signed?
       let signed=false;
       try { signed = await declaration.hasSigned(user); } catch {}
       if (signed) {
@@ -140,13 +140,12 @@
             $("name").disabled = true;
             $("signedBadge").style.display = "inline-block";
           }
-        } catch {/* ignore if mapping not exposed */}
+        } catch {}
       } else {
         $("name").disabled = false;
         $("signedBadge").style.display = "none";
       }
 
-      // Not minted: show preview and enable MINT
       showPreviewTile(); updatePreview();
       setButton(STATE.READY);
 
@@ -197,7 +196,7 @@
     throw lastErr;
   }
 
-  // ----- tokenId from receipt or poll
+  // ----- tokenId helpers
   async function getMintedTokenIdFromReceipt(rc){
     try{
       const erc721=new ethers.utils.Interface(["event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"]);
@@ -224,6 +223,16 @@
     throw new Error("Token not visible yet; please Retry.");
   }
 
+  // ----- tokenURI with retry (fixes your revert)
+  async function fetchTokenURIWithRetry(sbt, tokenId, tries=10, delayMs=1200){
+    let lastErr;
+    for(let i=0;i<tries;i++){
+      try{ return await sbt.tokenURI(tokenId); }
+      catch(e){ lastErr=e; await new Promise(r=>setTimeout(r,delayMs)); }
+    }
+    throw lastErr || new Error("tokenURI not available yet");
+  }
+
   // ----- Primary button handler
   async function onPrimaryClick(){
     if(appState===STATE.DISCONNECTED) return connect();
@@ -245,7 +254,6 @@
         const tx = await declaration.cosignDeclaration(chosen);
         const rc = await tx.wait();
         setStatus(`Signed. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc.transactionHash}">View on BaseScan</a>`);
-        // lock the name and show badge
         $("name").disabled = true;
         $("signedBadge").style.display = "inline-block";
       }
@@ -259,7 +267,7 @@
       let tokenId = await getMintedTokenIdFromReceipt(rc2);
       if(!tokenId) tokenId = await pollTokenIdOf(user);
 
-      const uri  = await sbt.tokenURI(tokenId);
+      const uri  = await fetchTokenURIWithRetry(sbt, tokenId, 12, 1200);
       const data = JSON.parse(atob(uri.split(",")[1]));
 
       showNftTile(data.image);
