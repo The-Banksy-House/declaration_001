@@ -29,6 +29,9 @@
   const DECLARATION_ADDR = "0xB0731E7ea189c169640Fd890E5dcE9811040D0eA";
   const SBT_ADDR          = "0xe255130A9e2277640d3DfB045075a38d63a34D06";
 
+  // Declaration deploy block (Base Sepolia)
+  const DECLARATION_DEPLOY_BLOCK = 30558001;
+
   const DECLARATION_ABI = [
     "function hasSigned(address) view returns (bool)",
     "function signatureByAddress(address) view returns (string)",
@@ -83,7 +86,6 @@
       const chain = await readChainId();
       onCorrectChain = chain === CHAIN_ID_HEX;
 
-      $("connect").disabled = false; // keep enabled so user can reconnect if needed
       setStatus(`Connected: ${user.slice(0,6)}…${user.slice(-4)} • Chain: ${chain}`);
 
       if (onCorrectChain) {
@@ -109,7 +111,7 @@
       if (onCorrectChain) {
         setBanner(false);
         $("retry").style.display = "none";
-        setMintEnabled(true);
+        setMintEnabled(!!user);
       } else {
         setMintEnabled(false);
         setBanner(true, "Still not on Base Sepolia (84532). Switch in your wallet, then press Retry.");
@@ -142,20 +144,43 @@
     });
   }
 
-  // Pull signee number from event logs (indexed by address)
+  // ---- Log scan with 10k-cap-safe windows ----
   async function getSigneeNumberViaLogs(addr) {
     const iface  = new ethers.utils.Interface(DECLARATION_ABI);
     const topic0 = iface.getEventTopic("DeclarationSigned");
-    const filter = {
-      address: DECLARATION_ADDR,
-      fromBlock: 0,           // can be narrowed to the Declaration deployment block for performance
-      toBlock: "latest",
-      topics: [topic0, ethers.utils.hexZeroPad(addr, 32)]
-    };
-    const logs = await provider.getLogs(filter);
-    if (!logs.length) throw new Error("No signature found for this address");
-    const parsed = iface.parseLog(logs[logs.length - 1]);
-    return parsed.args.signatureNumber.toNumber();
+    const latest = await provider.getBlockNumber();
+
+    const STEP = 8000; // under common 10k cap
+    let from = DECLARATION_DEPLOY_BLOCK > 0 ? DECLARATION_DEPLOY_BLOCK : Math.max(0, latest - STEP * 4);
+    let to   = Math.min(latest, from + STEP);
+
+    while (from <= latest) {
+      try {
+        const logs = await provider.getLogs({
+          address: DECLARATION_ADDR,
+          fromBlock: from,
+          toBlock: to,
+          topics: [topic0, ethers.utils.hexZeroPad(addr, 32)]
+        });
+
+        if (logs.length) {
+          const parsed = iface.parseLog(logs[logs.length - 1]);
+          return parsed.args.signatureNumber.toNumber();
+        }
+      } catch (e) {
+        // If RPC still complains about range, shrink once and retry this span
+        if (/range/i.test(e.message || "")) {
+          const half = Math.max(2000, Math.floor((to - from) / 2));
+          if (half < (to - from)) { to = from + half; continue; }
+        }
+        throw e;
+      }
+
+      from = to + 1;
+      to   = Math.min(latest, from + STEP);
+    }
+
+    throw new Error("No DeclarationSigned event found for this address");
   }
 
   async function handleMint() {
@@ -193,7 +218,7 @@
       }
 
       // Mint
-      setStatus("Fetching your signee number…");
+      setStatus("Looking up your signee number…");
       const signeeNumber = await getSigneeNumberViaLogs(user);
 
       setStatus("Minting your soulbound NFT…");
