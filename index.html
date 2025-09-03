@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>i_am_dave — Testnet Mint</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#2B2B2B; --fg:#F3F3F3; }
+  html,body { margin:0; padding:0; background:var(--bg); color:var(--fg); font-family:"JetBrains Mono", monospace; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 24px; display:flex; flex-direction:column; gap:16px; }
+  h1 { font-size:18px; margin:0 0 6px; }
+  .card { background:#1f1f1f; border:1px solid #3a3a3a; border-radius:12px; padding:16px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .input { flex:1; background:#151515; border:1px solid #3a3a3a; color:var(--fg); border-radius:10px; padding:12px 14px; font-family:inherit; font-size:16px; }
+  .btn { background:#0c0c0c; border:1px solid #3a3a3a; color:var(--fg); border-radius:10px; padding:12px 16px; font-size:16px; cursor:pointer; white-space:nowrap; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .hint { font-size:12px; opacity:.85; }
+  .nft { width:100%; aspect-ratio:1/1; background:#2B2B2B; border:1px solid #3a3a3a; border-radius:12px; display:grid; place-items:center; }
+  .share { display:flex; gap:10px; flex-wrap:wrap; }
+  a.link { color: var(--fg); text-decoration: underline; }
+</style>
+<script type="module">
+  import { createAppKit } from "https://cdn.jsdelivr.net/npm/@reown/appkit@1/dist/appkit.min.js";
+  import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.esm.min.js";
+
+  // ---- CONFIG: Base Sepolia + your contracts ----
+  const PROJECT_ID = "c6e735ab923e4817edde143987bdfccf"; // OK for testing
+  const BASE = {
+    chainId: 84532,
+    chainName: "Base Sepolia",
+    rpcUrls: ["https://sepolia.base.org"],
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }
+  };
+  const EXPLORER = "https://sepolia.basescan.org";
+  const DECLARATION_ADDR = "0xB0731E7ea189c169640Fd890E5dcE9811040D0eA";
+  const SBT_ADDR          = "0xe255130A9e2277640d3DfB045075a38d63a34D06";
+
+  // Minimal ABIs
+  const DECLARATION_ABI = [
+    "function hasSigned(address) view returns (bool)",
+    "function signatureByAddress(address) view returns (string)",
+    "function getSignature(uint256) view returns (string,address,uint256,uint256)",
+    "event DeclarationSigned(address indexed signatory, string daveName, uint256 signatureNumber, uint256 blockNumber)"
+  ];
+  const SBT_ABI = [
+    "function claimWithSignee(uint256 signeeNumber) external",
+    "function minted(address) view returns (bool)",           // not in your SBT, so we won’t call this
+    "function tokenIdOf(address) view returns (uint256)",
+    "function tokenURI(uint256) view returns (string)"
+  ];
+
+  // AppKit init
+  const appkit = createAppKit({
+    projectId: PROJECT_ID,
+    features: { analytics: false },
+    themeMode: "dark",
+    chainIds: [BASE.chainId]
+  });
+
+  // UI refs
+  let connectBtn, mintBtn, nameInput, status, previewText;
+
+  window.addEventListener("DOMContentLoaded", () => {
+    connectBtn = document.getElementById("connect");
+    mintBtn    = document.getElementById("mint");
+    nameInput  = document.getElementById("name");
+    status     = document.getElementById("status");
+    previewText= document.getElementById("previewText");
+
+    connectBtn.onclick = connect;
+    mintBtn.onclick    = handleMint;
+    nameInput.addEventListener("input", updatePreview);
+    updatePreview();
+  });
+
+  function updatePreview() {
+    const v = nameInput.value.trim();
+    previewText.textContent = v ? `i_am_${v}_dave` : "i_am_(yourName)_dave";
+  }
+
+  async function connect() {
+    const provider = await appkit.open();
+    if (!provider) return;
+
+    const web3 = new ethers.providers.Web3Provider(provider, "any");
+    const net  = await web3.getNetwork();
+    if (net.chainId !== BASE.chainId) {
+      try {
+        await provider.request({ method:"wallet_switchEthereumChain", params:[{ chainId: "0x" + BASE.chainId.toString(16) }] });
+      } catch {
+        await provider.request({ method:"wallet_addEthereumChain", params:[{
+          chainId: "0x" + BASE.chainId.toString(16), chainName: BASE.chainName,
+          nativeCurrency: BASE.nativeCurrency, rpcUrls: BASE.rpcUrls
+        }]});
+      }
+    }
+    const signer = web3.getSigner();
+    const addr   = await signer.getAddress();
+    status.textContent = `Connected: ${addr.slice(0,6)}…${addr.slice(-4)} on Base Sepolia`;
+    connectBtn.disabled = true;
+    mintBtn.disabled = false;
+  }
+
+  // Fetch your signee number via DeclarationSigned event (indexed by your address)
+  async function getSigneeNumberByLogs(provider, user) {
+    const iface  = new ethers.utils.Interface(DECLARATION_ABI);
+    const topic0 = iface.getEventTopic("DeclarationSigned");
+    const filter = {
+      address: DECLARATION_ADDR,
+      fromBlock: 0,
+      toBlock: "latest",
+      topics: [topic0, ethers.utils.hexZeroPad(user, 32)]
+    };
+    const logs = await provider.getLogs(filter);
+    if (!logs.length) throw new Error("No signature found for this address");
+    const parsed = iface.parseLog(logs[logs.length - 1]);
+    return parsed.args.signatureNumber.toNumber();
+  }
+
+  async function handleMint() {
+    try {
+      mintBtn.disabled = true;
+      status.textContent = "Preparing…";
+
+      const provider = appkit.getWalletProvider();
+      if (!provider) throw new Error("Wallet not connected");
+      const web3 = new ethers.providers.Web3Provider(provider, "any");
+      const signer = web3.getSigner();
+      const user   = await signer.getAddress();
+
+      const declaration = new ethers.Contract(DECLARATION_ADDR, DECLARATION_ABI, signer);
+      const sbt         = new ethers.Contract(SBT_ADDR, SBT_ABI, signer);
+
+      // If not signed, sign first
+      const hasSigned = await declaration.hasSigned(user);
+      if (!hasSigned) {
+        const chosen = nameInput.value.trim();
+        if (!/^[a-z0-9-]{1,14}$/.test(chosen)) {
+          throw new Error("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'");
+        }
+        status.textContent = "Signing the Declaration…";
+        const tx = await declaration.cosignDeclaration(chosen);
+        const rc = await tx.wait();
+        status.innerHTML = `Signed. <a class="link" href="${EXPLORER}/tx/${rc.transactionHash}" target="_blank">View on BaseScan</a>`;
+      }
+
+      // Get signee number and mint
+      status.textContent = "Fetching your signee number…";
+      const signeeNumber = await getSigneeNumberByLogs(web3, user);
+
+      status.textContent = "Minting your soulbound NFT…";
+      const tx2 = await sbt.claimWithSignee(signeeNumber);
+      const rc2 = await tx2.wait();
+      status.innerHTML = `Minted. <a class="link" href="${EXPLORER}/tx/${rc2.transactionHash}" target="_blank">View on BaseScan</a>`;
+
+      // Show NFT
+      const tokenId = await sbt.tokenIdOf(user);
+      const uri     = await sbt.tokenURI(tokenId);
+      const json    = atob(uri.split(",")[1]);
+      const data    = JSON.parse(json);
+      document.getElementById("nftTitle").textContent = data.name;
+      document.getElementById("nftImg").src = data.image;
+
+      const opensea = `https://testnets.opensea.io/assets/base-sepolia/${SBT_ADDR}/${tokenId}`; // may not load on testnet
+      document.getElementById("opensea").href = opensea;
+
+      const shareText = encodeURIComponent("I co-signed THE DECLARATION OF THE DAVES. The Banksy stays on the wall.");
+      document.getElementById("xshare").href  = `https://twitter.com/intent/tweet?text=${shareText}&url=${encodeURIComponent(EXPLORER + "/tx/" + rc2.transactionHash)}`;
+      document.getElementById("fcshare").href = `https://warpcast.com/~/compose?text=${shareText}&embeds[]=${encodeURIComponent(EXPLORER + "/tx/" + rc2.transactionHash)}`;
+
+      document.getElementById("result").style.display = "block";
+      mintBtn.disabled = true;
+
+    } catch (err) {
+      console.error(err);
+      status.textContent = err?.error?.message || err?.data?.message || err.message || "Something went wrong";
+      mintBtn.disabled = false;
+    }
+  }
+</script>
+</head>
+<body>
+  <div class="wrap">
+    <h1>i_am_dave — The Banksy Stays on the Wall (Base Sepolia)</h1>
+
+    <div class="card">
+      <button class="btn" id="connect">Connect wallet</button>
+      <div class="row" style="margin-top:12px;">
+        <input id="name" class="input" maxlength="14" placeholder="yourname"
+               pattern="[a-z0-9\-]{1,14}" title="lowercase letters, numbers, hyphen only" />
+        <button class="btn" id="mint" disabled>Mint</button>
+      </div>
+      <div class="hint">Format: i_am_(yourName)_dave • 1–14 chars • a–z, 0–9, -</div>
+      <div class="nft" style="margin-top:12px;">
+        <div id="previewText" style="font-size:24px; color:#F3F3F3;"></div>
+      </div>
+      <div id="status" class="hint" style="margin-top:10px;"></div>
+    </div>
+
+    <div id="result" class="card" style="display:none;">
+      <div class="nft"><img id="nftImg" alt="Your NFT" style="max-width:90%; max-height:90%;"/></div>
+      <div id="nftTitle" style="margin-top:8px;"></div>
+      <div class="share" style="margin-top:12px;">
+        <a id="opensea" class="link" target="_blank" rel="noopener">OpenSea (may not load on testnet)</a>
+        <a id="xshare" class="link" target="_blank" rel="noopener">Share on X</a>
+        <a id="fcshare" class="link" target="_blank" rel="noopener">Share on Farcaster</a>
+      </div>
+    </div>
+
+    <div class="hint">Declaration: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA • SBT: 0xe255130A9e2277640d3DfB045075a38d63a34D06 • Base Sepolia</div>
+  </div>
+</body>
+</html>
