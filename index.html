@@ -12,30 +12,27 @@
   h1 { font-size:18px; margin:0 0 6px; }
   .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; }
   .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  .input { flex:1; background:#151515; border:1px solid var(--border); color:var(--fg); border-radius:10px; padding:12px 14px; font-family:inherit; font-size:16px; }
-  .btn { background:#0c0c0c; border:1px solid var(--border); color:var(--fg); border-radius:10px; padding:12px 16px; font-size:16px; cursor:pointer; white-space:nowrap; }
-  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .input { width:100%; background:#151515; border:1px solid var(--border); color:var(--fg); border-radius:10px; padding:12px 14px; font-family:inherit; font-size:16px; }
+  .btn { background:#0c0c0c; border:1px solid var(--border); color:var(--fg); border-radius:10px; padding:12px 16px; font-size:16px; cursor:pointer; white-space:nowrap; width:100%; }
+  .btn:disabled { opacity:.6; cursor:not-allowed; }
   .hint { font-size:12px; opacity:.85; }
-  .nft { width:100%; aspect-ratio:1/1; background:#2B2B2B; border:1px solid var(--border); border-radius:12px; display:grid; place-items:center; }
-  .share { display:flex; gap:10px; flex-wrap:wrap; }
+  .nft { width:100%; aspect-ratio:1/1; background:#2B2B2B; border:1px solid var(--border); border-radius:12px; display:grid; place-items:center; overflow:hidden; }
+  .nft img { max-width:90%; max-height:90%; display:block; }
   a.link { color: var(--fg); text-decoration: underline; }
   .banner { background:#3a2b2b; border:1px solid #6b3a3a; color:#f3e6e6; padding:10px 12px; border-radius:8px; display:none; }
+  .right { margin-left:auto; opacity:.8; font-size:12px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 <script>
-  // -------- CONFIG: Base Sepolia --------
+  // ---- CONFIG (Base Sepolia) ----
   const CHAIN_ID_HEX = "0x14a34"; // 84532
   const EXPLORER = "https://sepolia.basescan.org";
   const DECLARATION_ADDR = "0xB0731E7ea189c169640Fd890E5dcE9811040D0eA";
   const SBT_ADDR          = "0xe255130A9e2277640d3DfB045075a38d63a34D06";
-
-  // Declaration deploy block (Base Sepolia)
   const DECLARATION_DEPLOY_BLOCK = 30558001;
 
   const DECLARATION_ABI = [
     "function hasSigned(address) view returns (bool)",
-    "function signatureByAddress(address) view returns (string)",
-    "function getSignature(uint256) view returns (string,address,uint256,uint256)",
     "function cosignDeclaration(string chosenName)",
     "event DeclarationSigned(address indexed signatory, string daveName, uint256 signatureNumber, uint256 blockNumber)"
   ];
@@ -45,23 +42,76 @@
     "function tokenURI(uint256) view returns (string)"
   ];
 
-  // -------- State --------
-  let provider, signer, user;
-  let onCorrectChain = false;
+  // ---- State machine
+  const STATE = {
+    DISCONNECTED: "DISCONNECTED",
+    WRONG_NETWORK: "WRONG_NETWORK",
+    READY: "READY",            // connected + correct network + not minted
+    PENDING_SIGN: "PENDING_SIGN",
+    PENDING_MINT: "PENDING_MINT",
+    MINTED: "MINTED"
+  };
+  let appState = STATE.DISCONNECTED;
 
-  const $ = (id) => document.getElementById(id);
+  // ---- Globals
+  let provider, signer, user, onCorrectChain = false, mintedTokenId = null;
 
-  function setStatus(msg) { $("status").innerHTML = msg; }
-  function setBanner(show, msg) {
+  // ---- Helpers
+  const $ = id => document.getElementById(id);
+  const setStatus = msg => $("status").innerHTML = msg || "";
+  const setBanner = (show, msg) => {
     const b = $("banner");
     if (show) { b.style.display = "block"; b.textContent = msg; }
     else { b.style.display = "none"; b.textContent = ""; }
+  };
+
+  function setButton(state) {
+    const btn = $("primary");
+    appState = state;
+
+    switch (state) {
+      case STATE.DISCONNECTED:
+        btn.textContent = "CONNECT WALLET";
+        btn.disabled = false;
+        break;
+      case STATE.WRONG_NETWORK:
+        btn.textContent = "WRONG NETWORK";
+        btn.disabled = true;
+        break;
+      case STATE.READY:
+        btn.textContent = "MINT";
+        btn.disabled = false;
+        break;
+      case STATE.PENDING_SIGN:
+        btn.textContent = "SIGNING…";
+        btn.disabled = true;
+        break;
+      case STATE.PENDING_MINT:
+        btn.textContent = "MINTING…";
+        btn.disabled = true;
+        break;
+      case STATE.MINTED:
+        btn.textContent = "MINTED";
+        btn.disabled = true;
+        break;
+    }
   }
-  function setMintEnabled(ok) { $("mint").disabled = !ok; }
 
   function updatePreview() {
     const v = $("name").value.trim();
     $("previewText").textContent = v ? `i_am_${v}_dave` : "i_am_(yourName)_dave";
+    $("count").textContent = `${v.length}/14`;
+  }
+
+  function lowercaseFilter(e){
+    const before = e.target.value;
+    const filtered = before.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0,14);
+    if (before !== filtered) { e.target.value = filtered; }
+    updatePreview();
+    // enable/disable READY state depending on validity when connected
+    if (appState === STATE.READY || appState === STATE.DISCONNECTED || appState === STATE.WRONG_NETWORK) {
+      // noop; mint validity is checked on click
+    }
   }
 
   async function readChainId() {
@@ -69,37 +119,77 @@
     return (id || "").toLowerCase();
   }
 
+  function renderTile(content) {
+    const box = $("tile");
+    box.innerHTML = "";
+    box.appendChild(content);
+  }
+
+  function makePreviewNode(text) {
+    const el = document.createElement("div");
+    el.style.fontSize = "24px";
+    el.style.color = "#F3F3F3";
+    el.textContent = text;
+    return el;
+  }
+
+  function makeImageNode(src) {
+    const img = document.createElement("img");
+    img.id = "nftImg";
+    img.alt = "Your NFT";
+    img.src = src;
+    return img;
+  }
+
+  // ---- Connect flow
   async function connect() {
     try {
       if (!window.ethereum) {
-        setStatus('No wallet detected. Install <a class="link" href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a> or use a wallet extension.');
+        setStatus('No wallet detected. Install <a class="link" href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a>.');
+        setButton(STATE.DISCONNECTED);
         return;
       }
 
       await window.ethereum.request({ method:"eth_requestAccounts" });
-
       provider = new ethers.providers.Web3Provider(window.ethereum, "any");
       signer   = provider.getSigner();
       user     = await signer.getAddress();
 
-      // chain check (no auto-switching)
       const chain = await readChainId();
       onCorrectChain = chain === CHAIN_ID_HEX;
 
       setStatus(`Connected: ${user.slice(0,6)}…${user.slice(-4)} • Chain: ${chain}`);
 
-      if (onCorrectChain) {
-        setBanner(false);
-        setMintEnabled(true);
-      } else {
-        setMintEnabled(false);
+      if (!onCorrectChain) {
         setBanner(true, "Switch your wallet to Base Sepolia (84532), then press Retry.");
+        setButton(STATE.WRONG_NETWORK);
         $("retry").style.display = "inline-block";
+        return;
       }
+
+      $("retry").style.display = "none";
+      setBanner(false);
+
+      // Check if already minted for this account
+      const sbt = new ethers.Contract(SBT_ADDR, SBT_ABI, signer);
+      try {
+        const tid = await sbt.tokenIdOf(user);
+        if (tid && !ethers.BigNumber.from(tid).isZero()) {
+          mintedTokenId = tid.toString();
+          await showNft(sbt, mintedTokenId);
+          setButton(STATE.MINTED);
+          return;
+        }
+      } catch { /* continue */ }
+
+      // Not minted: show live preview and enable MINT
+      renderTile(makePreviewNode($("name").value ? `i_am_${$("name").value}_dave` : "i_am_(yourName)_dave"));
+      setButton(STATE.READY);
 
     } catch (err) {
       console.error(err);
       setStatus(err?.error?.message || err?.data?.message || err.message || "Connection failed");
+      setButton(STATE.DISCONNECTED);
     }
   }
 
@@ -111,10 +201,22 @@
       if (onCorrectChain) {
         setBanner(false);
         $("retry").style.display = "none";
-        setMintEnabled(!!user);
+        // either READY or MINTED depending on token
+        const sbt = new ethers.Contract(SBT_ADDR, SBT_ABI, signer);
+        try {
+          const tid = await sbt.tokenIdOf(user);
+          if (tid && !ethers.BigNumber.from(tid).isZero()) {
+            mintedTokenId = tid.toString();
+            await showNft(sbt, mintedTokenId);
+            setButton(STATE.MINTED);
+            return;
+          }
+        } catch {}
+        renderTile(makePreviewNode($("name").value ? `i_am_${$("name").value}_dave` : "i_am_(yourName)_dave"));
+        setButton(STATE.READY);
       } else {
-        setMintEnabled(false);
         setBanner(true, "Still not on Base Sepolia (84532). Switch in your wallet, then press Retry.");
+        setButton(STATE.WRONG_NETWORK);
       }
     } catch (err) {
       console.error(err);
@@ -122,35 +224,13 @@
     }
   }
 
-  // Listen for wallet changes and react
-  function attachWalletListeners() {
-    if (!window.ethereum) return;
-    window.ethereum.on?.("accountsChanged", async (accounts) => {
-      user = (accounts && accounts[0]) ? accounts[0] : undefined;
-      setStatus(user ? `Account: ${user.slice(0,6)}…${user.slice(-4)}` : "Disconnected");
-      setMintEnabled(false);
-    });
-    window.ethereum.on?.("chainChanged", async (_chainId) => {
-      onCorrectChain = (_chainId || "").toLowerCase() === CHAIN_ID_HEX;
-      if (onCorrectChain) {
-        setBanner(false);
-        $("retry").style.display = "none";
-        setMintEnabled(!!user);
-      } else {
-        setMintEnabled(false);
-        setBanner(true, "Switch your wallet to Base Sepolia (84532), then press Retry.");
-        $("retry").style.display = "inline-block";
-      }
-    });
-  }
-
-  // ---- Log scan with 10k-cap-safe windows ----
+  // ---- Logs (safe windowing)
   async function getSigneeNumberViaLogs(addr) {
     const iface  = new ethers.utils.Interface(DECLARATION_ABI);
     const topic0 = iface.getEventTopic("DeclarationSigned");
     const latest = await provider.getBlockNumber();
+    const STEP = 8000;
 
-    const STEP = 8000; // under common 10k cap
     let from = DECLARATION_DEPLOY_BLOCK > 0 ? DECLARATION_DEPLOY_BLOCK : Math.max(0, latest - STEP * 4);
     let to   = Math.min(latest, from + STEP);
 
@@ -162,78 +242,80 @@
           toBlock: to,
           topics: [topic0, ethers.utils.hexZeroPad(addr, 32)]
         });
-
         if (logs.length) {
           const parsed = iface.parseLog(logs[logs.length - 1]);
           return parsed.args.signatureNumber.toNumber();
         }
       } catch (e) {
-        // If RPC still complains about range, shrink once and retry this span
         if (/range/i.test(e.message || "")) {
           const half = Math.max(2000, Math.floor((to - from) / 2));
           if (half < (to - from)) { to = from + half; continue; }
         }
         throw e;
       }
-
       from = to + 1;
       to   = Math.min(latest, from + STEP);
     }
-
     throw new Error("No DeclarationSigned event found for this address");
   }
 
-  async function handleMint() {
+  // ---- Primary button click handler (state machine)
+  async function onPrimaryClick() {
+    if (appState === STATE.DISCONNECTED) return connect();
+    if (appState === STATE.WRONG_NETWORK) return; // wait for manual switch + Retry
+    if (appState !== STATE.READY) return;
+
     try {
-      if (!provider || !signer || !user) { setStatus("Connect your wallet first."); return; }
-      if (!onCorrectChain) { setStatus("Switch your wallet to Base Sepolia (84532) and press Retry."); return; }
-
-      $("mint").disabled = true;
-      setStatus("Preparing…");
-
       const declaration = new ethers.Contract(DECLARATION_ADDR, DECLARATION_ABI, signer);
       const sbt         = new ethers.Contract(SBT_ADDR, SBT_ABI, signer);
 
-      // If already minted, just load
-      try {
-        const existingId = await sbt.tokenIdOf(user);
-        if (existingId && !ethers.BigNumber.from(existingId).isZero()) {
-          setStatus("You already minted. Loading your NFT…");
-          await showNft(sbt, existingId);
-          return;
-        }
-      } catch {/* ignore and continue */}
+      // Validate name
+      const chosen = $("name").value.trim();
+      if (!/^[a-z0-9-]{1,14}$/.test(chosen)) {
+        setStatus("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'");
+        return;
+      }
 
-      // If not signed, sign first
+      // If not signed, sign
+      setButton(STATE.PENDING_SIGN);
+      setStatus("Signing the Declaration…");
       const hasSigned = await declaration.hasSigned(user);
       if (!hasSigned) {
-        const chosen = $("name").value.trim();
-        if (!/^[a-z0-9-]{1,14}$/.test(chosen)) {
-          throw new Error("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'");
-        }
-        setStatus("Signing the Declaration…");
         const tx = await declaration.cosignDeclaration(chosen);
         const rc = await tx.wait();
-        setStatus(`Signed. <a class="link" href="${EXPLORER}/tx/${rc.transactionHash}" target="_blank" rel="noopener">View on BaseScan</a>`);
+        setStatus(`Signed. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc.transactionHash}">View on BaseScan</a>`);
       }
 
       // Mint
-      setStatus("Looking up your signee number…");
-      const signeeNumber = await getSigneeNumberViaLogs(user);
-
+      setButton(STATE.PENDING_MINT);
       setStatus("Minting your soulbound NFT…");
+      const signeeNumber = await getSigneeNumberViaLogs(user);
       const tx2 = await sbt.claimWithSignee(signeeNumber);
       const rc2 = await tx2.wait();
-      setStatus(`Minted. <a class="link" href="${EXPLORER}/tx/${rc2.transactionHash}" target="_blank" rel="noopener">View on BaseScan</a>`);
+      setStatus(`Minted. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc2.transactionHash}">View on BaseScan</a>`);
 
+      // Render NFT in the same tile
       const tokenId = await sbt.tokenIdOf(user);
-      await showNft(sbt, tokenId);
+      const uri  = await sbt.tokenURI(tokenId);
+      const json = atob(uri.split(",")[1]);
+      const data = JSON.parse(json);
+
+      renderTile(makeImageNode(data.image));
+      $("finalName").textContent = data.name || "";
+      $("links").style.display = "flex";
+      setButton(STATE.MINTED);
+      $("name").disabled = true;
 
     } catch (err) {
       console.error(err);
       setStatus(err?.error?.message || err?.data?.message || err.message || "Something went wrong");
-      $("mint").disabled = false;
+      setButton(STATE.READY);
     }
+  }
+
+  // ---- Render NFT links after mint
+  function showLinks(openseaUrl) {
+    $("opensea").href = openseaUrl;
   }
 
   async function showNft(sbt, tokenId) {
@@ -241,27 +323,46 @@
     const json = atob(uri.split(",")[1]);
     const data = JSON.parse(json);
 
-    $("nftTitle").textContent = data.name;
-    $("nftImg").src = data.image;
-
+    renderTile(makeImageNode(data.image));
+    $("finalName").textContent = data.name || "";
     const opensea = `https://testnets.opensea.io/assets/base-sepolia/${SBT_ADDR}/${tokenId}`;
     $("opensea").href = opensea;
+    $("links").style.display = "flex";
+    $("name").disabled = true;
+  }
 
-    const shareText = encodeURIComponent("I co-signed THE DECLARATION OF THE DAVES. The Banksy stays on the wall.");
-    $("xshare").href  = `https://twitter.com/intent/tweet?text=${shareText}&url=${encodeURIComponent(EXPLORER)}`;
-    $("fcshare").href = `https://warpcast.com/~/compose?text=${shareText}`;
-
-    $("result").style.display = "block";
-    $("mint").disabled = true;
+  // ---- Wallet listeners
+  function attachWalletListeners() {
+    if (!window.ethereum) return;
+    window.ethereum.on?.("accountsChanged", async (accounts) => {
+      user = (accounts && accounts[0]) ? accounts[0] : undefined;
+      setStatus(user ? `Account: ${user.slice(0,6)}…${user.slice(-4)}` : "Disconnected");
+      setButton(STATE.DISCONNECTED);
+      $("name").disabled = false;
+      renderTile(makePreviewNode($("name").value ? `i_am_${$("name").value}_dave` : "i_am_(yourName)_dave"));
+      $("links").style.display = "none";
+    });
+    window.ethereum.on?.("chainChanged", async (_chainId) => {
+      onCorrectChain = (_chainId || "").toLowerCase() === CHAIN_ID_HEX;
+      if (!onCorrectChain) {
+        setBanner(true, "Switch your wallet to Base Sepolia (84532), then press Retry.");
+        setButton(STATE.WRONG_NETWORK);
+      } else {
+        setBanner(false);
+        $("retry").style.display = "none";
+        if (user) setButton(STATE.READY);
+      }
+    });
   }
 
   window.addEventListener("DOMContentLoaded", () => {
-    $("connect").onclick = connect;
+    $("primary").onclick = onPrimaryClick;
     $("retry").onclick   = retryChainCheck;
-    $("mint").onclick    = handleMint;
-    $("name").addEventListener("input", updatePreview);
+    $("name").addEventListener("input", lowercaseFilter);
     updatePreview();
     attachWalletListeners();
+    // initial tile
+    renderTile(makePreviewNode("i_am_(yourName)_dave"));
   });
 </script>
 </head>
@@ -270,36 +371,23 @@
     <h1>i_am_dave — The Banksy Stays on the Wall (Base Sepolia)</h1>
 
     <div class="card">
-      <div class="row" style="gap:8px;">
-        <button class="btn" id="connect">Connect wallet</button>
-        <button class="btn" id="retry" style="display:none;">Retry</button>
-      </div>
-
       <div id="banner" class="banner"></div>
 
-      <div class="row" style="margin-top:12px;">
-        <input id="name" class="input" maxlength="14" placeholder="yourname"
-               pattern="[a-z0-9\-]{1,14}" title="lowercase letters, numbers, hyphen only" />
-        <button class="btn" id="mint" disabled>Mint</button>
+      <input id="name" class="input" maxlength="14" placeholder="yourname" autocomplete="off" />
+      <div class="row">
+        <button class="btn" id="primary">CONNECT WALLET</button>
+        <button class="btn" id="retry" style="display:none; width:auto;">Retry</button>
+        <div id="count" class="right">0/14</div>
       </div>
 
-      <div class="hint">Format: i_am_(yourName)_dave • 1–14 chars • a–z, 0–9, -</div>
+      <div id="tile" class="nft" style="margin-top:12px;"></div>
 
-      <div class="nft" style="margin-top:12px;">
-        <div id="previewText" style="font-size:24px; color:#F3F3F3;"></div>
-      </div>
-
-      <div id="status" class="hint" style="margin-top:10px;"></div>
-    </div>
-
-    <div id="result" class="card" style="display:none;">
-      <div class="nft"><img id="nftImg" alt="Your NFT" style="max-width:90%; max-height:90%;"/></div>
-      <div id="nftTitle" style="margin-top:8px;"></div>
-      <div class="share" style="margin-top:12px;">
+      <div id="links" class="row" style="display:none; margin-top:10px;">
         <a id="opensea" class="link" target="_blank" rel="noopener">OpenSea (may not load on testnet)</a>
-        <a id="xshare" class="link" target="_blank" rel="noopener">Share on X</a>
-        <a id="fcshare" class="link" target="_blank" rel="noopener">Share on Farcaster</a>
       </div>
+
+      <div id="finalName" class="hint" style="margin-top:6px;"></div>
+      <div id="status" class="hint" style="margin-top:10px;"></div>
     </div>
 
     <div class="hint">Declaration: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA • SBT: 0xe255130A9e2277640d3DfB045075a38d63a34D06 • Base Sepolia</div>
