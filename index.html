@@ -18,7 +18,10 @@
   .hint{font-size:12px;opacity:.85}
   .nft{width:100%;aspect-ratio:1/1;background:#2B2B2B;border:1px solid var(--border);border-radius:12px;display:grid;place-items:center;overflow:hidden}
   .nft img{max-width:90%;max-height:90%;display:block}
-  .right{text-align:right;margin-top:6px;opacity:.8;font-size:12px}
+  .row{display:flex;align-items:center;gap:8px}
+  .grow{flex:1}
+  .right{text-align:right;margin-top:6px;opacity:.85;font-size:12px}
+  .badge{display:inline-block;border:1px solid var(--border);border-radius:8px;padding:2px 6px;font-size:11px;opacity:.95}
   a.link{color:var(--fg);text-decoration:underline}
   .banner{background:#3a2b2b;border:1px solid #6b3a3a;color:#f3e6e6;padding:10px 12px;border-radius:8px;display:none;margin-bottom:8px}
 </style>
@@ -33,6 +36,7 @@
 
   const DECLARATION_ABI = [
     "function hasSigned(address) view returns (bool)",
+    "function signatureByAddress(address) view returns (string)",
     "function cosignDeclaration(string chosenName)",
     "event DeclarationSigned(address indexed signatory, string daveName, uint256 signatureNumber, uint256 blockNumber)"
   ];
@@ -68,7 +72,9 @@
   function updatePreview(){
     const v=$("name").value.trim();
     $("count").textContent=`${v.length}/14`;
-    if(appState!==STATE.MINTED){ $("previewText").textContent = v ? `i_am_${v}_dave` : "i_am_(yourName)_dave"; }
+    if(appState!==STATE.MINTED){
+      $("previewText").textContent = v ? `i_am_${v}_dave` : "i_am_(yourName)_dave";
+    }
   }
   function normalizeInput(e){
     const before=e.target.value;
@@ -103,8 +109,10 @@
       }
       setBanner(false); $("retry").style.display="none";
 
-      // Already minted?
+      const declaration=new ethers.Contract(DECLARATION_ADDR,DECLARATION_ABI,signer);
       const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
+
+      // If already minted, render NFT
       try{
         const tid=await sbt.tokenIdOf(user);
         if(tid && !ethers.BigNumber.from(tid).isZero()){
@@ -114,14 +122,34 @@
           $("finalName").textContent=data.name||"";
           $("links").style.display="flex";
           $("name").disabled=true;
+          $("signedBadge").style.display="inline-block"; // minted implies signed
           setButton(STATE.MINTED);
           return;
         }
       }catch{/* not minted */}
 
-      $("name").disabled=false;
+      // Check if already SIGNED (but not minted)
+      let signed=false;
+      try { signed = await declaration.hasSigned(user); } catch {}
+      if (signed) {
+        try {
+          const full = await declaration.signatureByAddress(user); // "i_am_xxx_dave"
+          const m = full.match(/^i_am_(.*)_dave$/);
+          if (m && m[1]) {
+            $("name").value = m[1];
+            $("name").disabled = true;
+            $("signedBadge").style.display = "inline-block";
+          }
+        } catch {/* ignore if mapping not exposed */}
+      } else {
+        $("name").disabled = false;
+        $("signedBadge").style.display = "none";
+      }
+
+      // Not minted: show preview and enable MINT
       showPreviewTile(); updatePreview();
       setButton(STATE.READY);
+
     }catch(err){
       console.error(err);
       setStatus(err?.error?.message||err?.data?.message||err.message||"Connection failed");
@@ -160,7 +188,6 @@
     }
     throw new Error("No DeclarationSigned event found for this address");
   }
-
   async function getSigneeNumberWithRetry(addr, tries=6, delayMs=1500){
     let lastErr;
     for(let i=0;i<tries;i++){
@@ -170,30 +197,28 @@
     throw lastErr;
   }
 
-  // ----- Extract tokenId from mint receipt or poll until ready
+  // ----- tokenId from receipt or poll
   async function getMintedTokenIdFromReceipt(rc){
     try{
-      const erc721 = new ethers.utils.Interface(["event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"]);
-      const topic  = erc721.getEventTopic("Transfer");
-      const logs = rc.logs.filter(l => l.address.toLowerCase() === SBT_ADDR.toLowerCase() && l.topics[0] === topic);
+      const erc721=new ethers.utils.Interface(["event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"]);
+      const topic=erc721.getEventTopic("Transfer");
+      const logs=rc.logs.filter(l => l.address.toLowerCase()===SBT_ADDR.toLowerCase() && l.topics[0]===topic);
       for(const l of logs){
-        // topics[1]=from, topics[2]=to (both indexed as 32-byte)
-        if (l.topics[2].toLowerCase() === ethers.utils.hexZeroPad(user,32).toLowerCase()){
-          const parsed = erc721.parseLog(l);
+        if(l.topics[2].toLowerCase()===ethers.utils.hexZeroPad(user,32).toLowerCase()){
+          const parsed=erc721.parseLog(l);
           return parsed.args.tokenId;
         }
       }
-    }catch{/* fallthrough */}
+    }catch{}
     return null;
   }
-
   async function pollTokenIdOf(addr, tries=8, delayMs=1200){
     const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
     for(let i=0;i<tries;i++){
       try{
-        const tid = await sbt.tokenIdOf(addr);
+        const tid=await sbt.tokenIdOf(addr);
         if(tid && !ethers.BigNumber.from(tid).isZero()) return tid;
-      }catch{/* ignore */}
+      }catch{}
       await new Promise(r=>setTimeout(r,delayMs));
     }
     throw new Error("Token not visible yet; please Retry.");
@@ -213,12 +238,16 @@
       if(!/^[a-z0-9-]{1,14}$/.test(chosen)){ setStatus("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'"); return; }
 
       setButton(STATE.PENDING_SIGN);
-      setStatus("Signing the Declaration…");
-      const hasSigned = await declaration.hasSigned(user);
-      if(!hasSigned){
+      setStatus("Checking signature…");
+      const already = await declaration.hasSigned(user);
+      if(!already){
+        setStatus("Signing the Declaration…");
         const tx = await declaration.cosignDeclaration(chosen);
         const rc = await tx.wait();
         setStatus(`Signed. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc.transactionHash}">View on BaseScan</a>`);
+        // lock the name and show badge
+        $("name").disabled = true;
+        $("signedBadge").style.display = "inline-block";
       }
 
       setButton(STATE.PENDING_MINT);
@@ -227,11 +256,9 @@
       const tx2 = await sbt.claimWithSignee(signeeNumber);
       const rc2 = await tx2.wait();
 
-      // Prefer tokenId from receipt; fallback to polling mapping
       let tokenId = await getMintedTokenIdFromReceipt(rc2);
       if(!tokenId) tokenId = await pollTokenIdOf(user);
 
-      // Now safe to read tokenURI
       const uri  = await sbt.tokenURI(tokenId);
       const data = JSON.parse(atob(uri.split(",")[1]));
 
@@ -242,7 +269,6 @@
 
       setStatus(`Minted. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc2.transactionHash}">View on BaseScan</a>`);
       setButton(STATE.MINTED);
-      $("name").disabled = true;
 
     }catch(err){
       console.error(err);
@@ -254,8 +280,17 @@
   // ----- Wallet listeners
   function attachWalletListeners(){
     if(!window.ethereum) return;
-    window.ethereum.on?.("accountsChanged",()=>{ setButton(STATE.DISCONNECTED); $("name").disabled=false; showPreviewTile(); updatePreview(); $("links").style.display="none"; setStatus("Account changed. Reconnect."); });
-    window.ethereum.on?.("chainChanged",(cid)=>{ const ok=(cid||"").toLowerCase()===CHAIN_ID_HEX; if(ok){ setBanner(false); $("retry").style.display="none"; } else { setBanner(true,"Switch your wallet to Base Sepolia (84532), then press Retry."); setButton(STATE.WRONG_NETWORK); } });
+    window.ethereum.on?.("accountsChanged",()=>{
+      setButton(STATE.DISCONNECTED);
+      $("name").disabled=false; $("signedBadge").style.display="none";
+      showPreviewTile(); updatePreview(); $("links").style.display="none";
+      setStatus("Account changed. Reconnect.");
+    });
+    window.ethereum.on?.("chainChanged",(cid)=>{
+      const ok=(cid||"").toLowerCase()===CHAIN_ID_HEX;
+      if(ok){ setBanner(false); $("retry").style.display="none"; }
+      else { setBanner(true,"Switch your wallet to Base Sepolia (84532), then press Retry."); setButton(STATE.WRONG_NETWORK); }
+    });
   }
 
   // ----- Boot
@@ -277,8 +312,13 @@
 
       <button class="btn" id="primary">CONNECT WALLET</button>
 
-      <input id="name" class="input" maxlength="14" placeholder="yourname" autocomplete="off" />
-      <div class="right"><span id="count">0/14</span></div>
+      <div class="row">
+        <input id="name" class="input grow" maxlength="14" placeholder="yourname" autocomplete="off" />
+      </div>
+      <div class="row" style="justify-content:space-between;margin-top:6px;">
+        <div class="hint"><span id="signedBadge" class="badge" style="display:none;">Signed ✓</span></div>
+        <div class="right"><span id="count">0/14</span></div>
+      </div>
 
       <div id="tile" class="nft" style="margin-top:12px;">
         <div id="previewText" style="font-size:24px;color:#F3F3F3;">i_am_(yourName)_dave</div>
