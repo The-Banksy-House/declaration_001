@@ -217,3 +217,410 @@ function trapFocus(e){
   if (!focusables.length) return;
   const first = focusables[0];
   const last = focusables[focusables.length-1];
+  if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+}
+function useProvider(detail, remember){
+  selectedProvider = detail.provider;
+  if (remember){
+    const key = detail.info?.uuid || detail.info?.rdns || "injected";
+    localStorage.setItem(LS_KEY, key);
+  }
+  $("chosenLabel").textContent = detail.info?.name || "Wallet";
+  attachWalletListeners(selectedProvider);
+  closeChooser();
+  if (autoConnectAfterChoose) {
+    autoConnectAfterChoose = false;
+    connect().catch(err=>{
+      console.error(err);
+      setStatus(rpcMessage(err));
+      setButton(STATE.DISCONNECTED);
+    });
+  } else {
+    setStatus("Wallet selected. Click CONNECT WALLET to proceed.");
+  }
+}
+
+/* =================== CHAIN / RPC HELPERS =================== */
+async function readChainId(p){ const id=await p.request({method:"eth_chainId"}); return (id||"").toLowerCase(); }
+async function attemptSwitchNetwork(){
+  if(!selectedProvider) return false;
+  try{
+    await selectedProvider.request({ method:"wallet_switchEthereumChain", params:[{ chainId: CHAIN_ID_HEX }] });
+    return true;
+  }catch(err){
+    if(err?.code===4902 || err?.data?.originalError?.code===4902){
+      try{
+        await selectedProvider.request({ method:"wallet_addEthereumChain", params:[BASE_SEPOLIA] });
+        return true;
+      }catch{}
+    }
+  }
+  return false;
+}
+async function preflightContracts(){
+  const codeDecl = await provider.getCode(DECLARATION_ADDR);
+  if(!codeDecl || codeDecl==="0x") throw new Error("No contract code at Declaration address on this network.");
+  const codeSbt = await provider.getCode(SBT_ADDR);
+  if(!codeSbt || codeSbt==="0x") throw new Error("No contract code at SBT address on this network.");
+}
+
+/* =================== CONTRACT HELPERS =================== */
+/** Bounded, backward scan using queryFilter to avoid RPC flakiness */
+async function getSigneeNumberViaLogs(addr){
+  const decl = new ethers.Contract(DECLARATION_ADDR, DECLARATION_ABI, provider);
+  const filter = decl.filters.DeclarationSigned(addr);
+  const latest = await provider.getBlockNumber();
+  const WINDOW = 30000; // scan in 30k block windows
+  let from = Math.max(DECLARATION_DEPLOY_BLOCK, latest - WINDOW);
+  while (from >= DECLARATION_DEPLOY_BLOCK){
+    const to = from + WINDOW;
+    const logs = await decl.queryFilter(filter, from, to).catch(()=>[]);
+    if (logs && logs.length){
+      const last = logs[logs.length-1];
+      return last.args.signatureNumber.toNumber();
+    }
+    from -= WINDOW;
+  }
+  throw new Error("No DeclarationSigned event found for this address");
+}
+async function getSigneeNumberWithRetry(addr, tries=6, delayMs=1200){
+  let lastErr;
+  for(let i=0;i<tries;i++){
+    try{ return await getSigneeNumberViaLogs(addr); }
+    catch(e){ lastErr=e; await new Promise(r=>setTimeout(r,delayMs)); }
+  }
+  throw lastErr;
+}
+async function getMintedTokenIdFromReceipt(rc){
+  try{
+    const erc721=new ethers.utils.Interface(["event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"]);
+    const topic=erc721.getEventTopic("Transfer");
+    const logs=rc.logs.filter(l => l.address.toLowerCase()===SBT_ADDR.toLowerCase() && l.topics[0]===topic);
+    for(const l of logs){
+      if(l.topics[2].toLowerCase()===ethers.utils.hexZeroPad(user,32).toLowerCase()){
+        const parsed=erc721.parseLog(l);
+        return parsed.args.tokenId;
+      }
+    }
+  }catch{}
+  return null;
+}
+async function pollTokenIdOf(addr, tries=8, delayMs=1200){
+  const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
+  for(let i=0;i<tries;i++){
+    try{
+      const tid=await sbt.tokenIdOf(addr);
+      if(tid && !ethers.BigNumber.from(tid).isZero()) return tid;
+    }catch{}
+    await new Promise(r=>setTimeout(r,delayMs));
+  }
+  throw new Error("Token not visible yet; switch back to the tab for a moment and it should appear.");
+}
+async function fetchTokenJSON(sbt, tokenId, tries=12, delayMs=1200){
+  let lastErr;
+  for(let i=0;i<tries;i++){
+    try{
+      const uri = await sbt.tokenURI(tokenId);
+      if (uri?.startsWith("data:application/json")) {
+        const base64 = uri.split(",")[1] || "";
+        return JSON.parse(atob(base64));
+      } else {
+        const res = await fetch(uri.replace("ipfs://","https://ipfs.io/ipfs/"));
+        return await res.json();
+      }
+    } catch(e) { lastErr=e; await new Promise(r=>setTimeout(r,delayMs)); }
+  }
+  throw lastErr || new Error("tokenURI not available yet");
+}
+
+/* =================== CONNECT / FLOW =================== */
+async function connect(){
+  if (connecting) return;
+  connecting = true;
+  const my = ++sessionId;
+  setButton(STATE.PENDING_SIGN);
+
+  try{
+    // resolve saved provider or open chooser
+    const savedKey = localStorage.getItem(LS_KEY);
+    if (!selectedProvider){
+      let list = discovered.length ? discovered : buildFallbackList();
+      const found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
+      if (found) {
+        useProvider(found, false);
+      } else {
+        openChooser(true);
+        return;
+      }
+    }
+
+    await selectedProvider.request({method:"eth_requestAccounts"});
+    if (sessionId !== my) return; // abandon stale
+    provider = new ethers.providers.Web3Provider(selectedProvider, "any");
+    signer   = provider.getSigner();
+    user     = await signer.getAddress();
+
+    let chain = await readChainId(selectedProvider);
+    onCorrectChain = chain === CHAIN_ID_HEX;
+    if(!onCorrectChain){
+      setBanner(true,"Switch your wallet to Base Sepolia (84532). Attempting to switch now.");
+      await attemptSwitchNetwork().catch(()=>{});
+      chain = await readChainId(selectedProvider).catch(()=>chain);
+      onCorrectChain = chain === CHAIN_ID_HEX;
+    }
+    setStatus(`Connected: ${user.slice(0,6)}…${user.slice(-4)} • Chain: ${chain}`);
+    if(!onCorrectChain){
+      setBanner(true,"Switch your wallet to Base Sepolia (84532). This page will update automatically once you switch.");
+      setButton(STATE.WRONG_NETWORK);
+      return;
+    }
+    setBanner(false);
+
+    try{ await preflightContracts(); }
+    catch(preErr){ setStatus(preErr.message); setButton(STATE.DISCONNECTED); return; }
+
+    const declaration=new ethers.Contract(DECLARATION_ADDR,DECLARATION_ABI,signer);
+    const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
+
+    // Already minted?
+    try{
+      const tid=await sbt.tokenIdOf(user);
+      if(tid && !ethers.BigNumber.from(tid).isZero()){
+        const data=await fetchTokenJSON(sbt, tid);
+        showNftTile(data.image);
+        $("finalName").textContent=data.name||"";
+        $("links").style.display="flex";
+        $("name").disabled=true;
+        $("signedBadge").style.display="inline-block";
+        setButton(STATE.MINTED);
+        return;
+      }
+    }catch{}
+
+    // Already signed?
+    let signed=false;
+    try { signed = await declaration.hasSigned(user); } catch {}
+    if (signed) {
+      try {
+        const full = await declaration.signatureByAddress(user); // "i_am_xxx_dave"
+        const m = full.match(/^i_am_(.*)_dave$/);
+        if (m && m[1]) {
+          $("name").value = m[1];
+          $("name").disabled = true;
+          $("signedBadge").style.display = "inline-block";
+        }
+      } catch {}
+    } else {
+      $("name").disabled = false;
+      $("signedBadge").style.display = "none";
+    }
+
+    showPreviewTile(); updatePreview();
+    setButton(STATE.READY);
+
+  }catch(err){
+    console.error(err);
+    setStatus(rpcMessage(err));
+    setButton(STATE.DISCONNECTED);
+  } finally {
+    if (sessionId === my) connecting = false;
+  }
+}
+
+async function onPrimaryClick(){
+  if(appState===STATE.DISCONNECTED){
+    if (!selectedProvider) { openChooser(true); return; }
+    return connect();
+  }
+  if(appState===STATE.WRONG_NETWORK) return;
+  if(appState!==STATE.READY) return;
+
+  try{
+    const declaration=new ethers.Contract(DECLARATION_ADDR,DECLARATION_ABI,signer);
+    const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
+
+    const chosen=$("name").value.trim();
+    if(!/^[a-z0-9-]{1,14}$/.test(chosen)){ setStatus("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'"); return; }
+
+    setButton(STATE.PENDING_SIGN);
+    setStatus("Checking signature…");
+    const already = await declaration.hasSigned(user);
+    if(!already){
+      try{ await declaration.callStatic.cosignDeclaration(chosen); }
+      catch(e){ throw new Error("Declaration revert: " + rpcMessage(e)); }
+
+      setStatus("Signing the Declaration…");
+      const tx = await declaration.cosignDeclaration(chosen);
+      const rc = await tx.wait();
+      setStatus(`Signed. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc.transactionHash}">View on BaseScan</a>`);
+      $("name").disabled = true;
+      $("signedBadge").style.display = "inline-block";
+    }
+
+    setButton(STATE.PENDING_MINT);
+    setStatus("Minting your soulbound NFT…");
+    const signeeNumber = await getSigneeNumberWithRetry(user, 6, 1200);
+
+    try{ await sbt.callStatic.claimWithSignee(signeeNumber); }
+    catch(e){ throw new Error("Mint revert: " + rpcMessage(e)); }
+
+    const tx2 = await sbt.claimWithSignee(signeeNumber, { gasLimit: 300000 });
+    const rc2 = await tx2.wait();
+
+    let tokenId = await getMintedTokenIdFromReceipt(rc2);
+    if(!tokenId) tokenId = await pollTokenIdOf(user);
+
+    const data = await fetchTokenJSON(sbt, tokenId, 12, 1200);
+
+    showNftTile(data.image);
+    $("finalName").textContent = data.name || "";
+    $("links").style.display = "flex";
+    $("opensea").href = `https://testnets.opensea.io/assets/base-sepolia/${SBT_ADDR}/${tokenId}`;
+
+    setStatus(`Minted. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc2.transactionHash}">View on BaseScan</a>`);
+    setButton(STATE.MINTED);
+
+  }catch(err){
+    console.error(err);
+    setStatus(rpcMessage(err));
+    setButton(STATE.READY);
+  }
+}
+
+/* =================== LISTENERS =================== */
+function attachWalletListeners(p){
+  if(!p) return;
+  p.removeAllListeners?.();
+  p.on?.("accountsChanged",()=>{
+    sessionId++; // invalidate in-flight
+    setButton(STATE.DISCONNECTED);
+    user = null; provider = null; signer = null;
+    $("name").disabled=false; $("signedBadge").style.display="none";
+    showPreviewTile(); updatePreview(); $("links").style.display="none";
+    setStatus("Account changed. Reconnect.");
+  });
+  p.on?.("chainChanged", async (cid)=>{
+    const ok=(cid||"").toLowerCase()===CHAIN_ID_HEX;
+    if(ok){
+      setBanner(false);
+      if (user) { await connect(); }
+    } else {
+      setBanner(true,"Switch your wallet to Base Sepolia (84532). This page will update automatically once you switch.");
+      setButton(STATE.WRONG_NETWORK);
+    }
+  });
+  p.on?.("disconnect",(err)=>{
+    console.warn("Provider disconnected", err);
+    sessionId++; // invalidate in-flight
+    user = null; provider = null; signer = null;
+    setBanner(true,"Wallet disconnected. Reconnect to continue.");
+    setButton(STATE.DISCONNECTED);
+  });
+}
+window.addEventListener("visibilitychange", async ()=>{
+  if(document.visibilityState==="visible" && selectedProvider && user && !connecting){
+    try{
+      const chain = await readChainId(selectedProvider);
+      const ok = chain === CHAIN_ID_HEX;
+      if(ok && appState===STATE.WRONG_NETWORK){ setBanner(false); await connect(); }
+      if(!ok && appState!==STATE.WRONG_NETWORK){ setBanner(true,"Switch your wallet to Base Sepolia (84532)."); setButton(STATE.WRONG_NETWORK); }
+    }catch{}
+  }
+});
+document.addEventListener("keydown",(e)=>{
+  if ($("overlay").style.display==="flex" && e.key==="Escape") closeChooser();
+});
+
+/* =================== BOOT =================== */
+async function trySilentReconnect(){
+  const savedKey = localStorage.getItem(LS_KEY);
+  if (!savedKey) return;
+  // Try to resolve immediately
+  let list = discovered.length ? discovered : buildFallbackList();
+  let found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
+  // If not found yet, give discovery a moment
+  if (!found){
+    await new Promise(r=>setTimeout(r, 400));
+    list = discovered.length ? discovered : buildFallbackList();
+    found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
+  }
+  if (!found) return;
+  selectedProvider = found.provider;
+  attachWalletListeners(selectedProvider);
+  try{
+    const accs = await selectedProvider.request({ method:"eth_accounts" });
+    if (Array.isArray(accs) && accs.length){
+      setStatus("Reconnecting to your wallet…");
+      await connect();
+    }
+  }catch{}
+}
+
+window.addEventListener("DOMContentLoaded",()=>{
+  $("primary").onclick = onPrimaryClick;
+  $("changeWallet").onclick = ()=>{
+    localStorage.removeItem(LS_KEY);
+    selectedProvider=null;
+    $("chosenLabel").textContent="—";
+    openChooser(true);
+  };
+  $("name").addEventListener("input",normalizeInput);
+  showPreviewTile(); updatePreview();
+  startDiscovery();
+  trySilentReconnect(); // P0: silent reconnect if previously authorized
+});
+</script>
+</head>
+<body>
+  <div class="wrap">
+    <h1>i_am_dave — The Banksy Stays on the Wall (Base Sepolia)</h1>
+
+    <div class="card">
+      <div id="banner" class="banner"></div>
+
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <button class="btn" id="primary">CONNECT WALLET</button>
+      </div>
+
+      <div class="row" style="justify-content:space-between;margin-top:4px;">
+        <div class="hint">Wallet: <span id="chosenLabel">—</span></div>
+        <button id="changeWallet" class="linklike">Change wallet</button>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <input id="name" class="input grow" maxlength="14" placeholder="yourname" autocomplete="off" />
+      </div>
+      <div class="row" style="justify-content:space-between;margin-top:6px;">
+        <div class="hint"><span id="signedBadge" class="badge" style="display:none;">Signed ✓</span></div>
+        <div class="right"><span id="count">0/14</span></div>
+      </div>
+
+      <div id="tile" class="nft" style="margin-top:12px;">
+        <div id="previewText" style="font-size:24px;color:#F3F3F3;">i_am_(yourName)_dave</div>
+      </div>
+
+      <div id="links" class="hint" style="display:none;margin-top:10px;">
+        <a id="opensea" class="link" target="_blank" rel="noopener">OpenSea (may not load on testnet)</a>
+      </div>
+
+      <div id="finalName" class="hint" style="margin-top:6px;"></div>
+      <div id="status" class="hint" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="hint">Declaration: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA • SBT: 0xe255130A9e2277640d3DfB045075a38d63a34D06 • Base Sepolia</div>
+  </div>
+
+  <!-- Wallet chooser modal; accessible -->
+  <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="chooserTitle">
+    <div class="modal" id="modal">
+      <h2 id="chooserTitle">Select a wallet</h2>
+      <div class="chooserGrid" id="chooserList"></div>
+      <div class="footrow">
+        <span class="hint">Your choice is remembered for this site.</span>
+        <button class="btn small" onclick="closeChooser()">Close</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
