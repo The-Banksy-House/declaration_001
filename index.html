@@ -6,29 +6,29 @@
 <title>i_am_dave — Mint (Base Sepolia)</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; }
-  :root { --bg:#2B2B2B; --fg:#F3F3F3; --panel:#1f1f1f; --border:#3a3a3a; }
-  html,body { margin:0; padding:0; background:var(--bg); color:var(--fg); font-family:"JetBrains Mono", monospace; }
-  .wrap { max-width: 560px; margin: 0 auto; padding: 24px; display:flex; flex-direction:column; gap:16px; }
-  h1 { font-size:18px; margin:0 0 6px; }
-  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; }
-  .btn { display:block; width:100%; background:#0c0c0c; border:1px solid var(--border); color:var(--fg); border-radius:10px; padding:12px 16px; font-size:16px; cursor:pointer; }
-  .btn:disabled { opacity:.6; cursor:not-allowed; }
-  .input { width:100%; background:#151515; border:1px solid var(--border); color:var(--fg); border-radius:10px; padding:12px 14px; font-family:inherit; font-size:16px; }
-  .hint { font-size:12px; opacity:.85; }
-  .nft { width:100%; aspect-ratio:1/1; background:#2B2B2B; border:1px solid var(--border); border-radius:12px; display:grid; place-items:center; overflow:hidden; }
-  .nft img { max-width:90%; max-height:90%; display:block; }
-  .right { text-align:right; margin-top:6px; opacity:.8; font-size:12px; }
-  a.link { color: var(--fg); text-decoration: underline; }
-  .banner { background:#3a2b2b; border:1px solid #6b3a3a; color:#f3e6e6; padding:10px 12px; border-radius:8px; display:none; margin-bottom:8px; }
+  *{box-sizing:border-box}
+  :root{--bg:#2B2B2B;--fg:#F3F3F3;--panel:#1f1f1f;--border:#3a3a3a}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:"JetBrains Mono",monospace}
+  .wrap{max-width:560px;margin:0 auto;padding:24px;display:flex;flex-direction:column;gap:16px}
+  h1{font-size:18px;margin:0 0 6px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .btn{display:block;width:100%;background:#0c0c0c;border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:12px 16px;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .input{width:100%;background:#151515;border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:12px 14px;font-family:inherit;font-size:16px}
+  .hint{font-size:12px;opacity:.85}
+  .nft{width:100%;aspect-ratio:1/1;background:#2B2B2B;border:1px solid var(--border);border-radius:12px;display:grid;place-items:center;overflow:hidden}
+  .nft img{max-width:90%;max-height:90%;display:block}
+  .right{text-align:right;margin-top:6px;opacity:.8;font-size:12px}
+  a.link{color:var(--fg);text-decoration:underline}
+  .banner{background:#3a2b2b;border:1px solid #6b3a3a;color:#f3e6e6;padding:10px 12px;border-radius:8px;display:none;margin-bottom:8px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 <script>
-  // ---- CONFIG (Base Sepolia) ----
+  // ----- CONFIG (Base Sepolia)
   const CHAIN_ID_HEX = "0x14a34"; // 84532
   const EXPLORER = "https://sepolia.basescan.org";
   const DECLARATION_ADDR = "0xB0731E7ea189c169640Fd890E5dcE9811040D0eA";
-  const SBT_ADDR          = "0xe255130A9e2277640d3DfB045075a38d63a34D06";
+  const SBT_ADDR         = "0xe255130A9e2277640d3DfB045075a38d63a34D06";
   const DECLARATION_DEPLOY_BLOCK = 30558001;
 
   const DECLARATION_ABI = [
@@ -42,63 +42,51 @@
     "function tokenURI(uint256) view returns (string)"
   ];
 
-  // ---- State
+  // ----- State machine
   const STATE = { DISCONNECTED:"DISCONNECTED", WRONG_NETWORK:"WRONG_NETWORK", READY:"READY", PENDING_SIGN:"PENDING_SIGN", PENDING_MINT:"PENDING_MINT", MINTED:"MINTED" };
   let appState = STATE.DISCONNECTED;
+
+  // ----- Globals
   let provider, signer, user, onCorrectChain=false;
 
-  // ---- DOM helpers
+  // ----- DOM helpers
   const $ = id => document.getElementById(id);
   const setStatus = msg => $("status").innerHTML = msg || "";
-  const setBanner = (show, msg) => { const b=$("banner"); if(show){ b.style.display="block"; b.textContent=msg; } else { b.style.display="none"; b.textContent=""; } };
+  const setBanner = (show,msg)=>{ const b=$("banner"); if(show){b.style.display="block";b.textContent=msg}else{b.style.display="none";b.textContent=""} };
 
-  function setButton(state) {
-    appState = state;
-    const btn = $("primary");
-    if (state === STATE.DISCONNECTED) { btn.textContent="CONNECT WALLET"; btn.disabled=false; return; }
-    if (state === STATE.WRONG_NETWORK) { btn.textContent="WRONG NETWORK"; btn.disabled=true; return; }
-    if (state === STATE.READY) { btn.textContent="MINT"; btn.disabled=false; return; }
-    if (state === STATE.PENDING_SIGN) { btn.textContent="SIGNING…"; btn.disabled=true; return; }
-    if (state === STATE.PENDING_MINT) { btn.textContent="MINTING…"; btn.disabled=true; return; }
-    if (state === STATE.MINTED) { btn.textContent="MINTED"; btn.disabled=true; return; }
+  function setButton(state){
+    appState=state; const btn=$("primary");
+    if(state===STATE.DISCONNECTED){btn.textContent="CONNECT WALLET";btn.disabled=false;return;}
+    if(state===STATE.WRONG_NETWORK){btn.textContent="WRONG NETWORK";btn.disabled=true;return;}
+    if(state===STATE.READY){btn.textContent="MINT";btn.disabled=false;return;}
+    if(state===STATE.PENDING_SIGN){btn.textContent="SIGNING…";btn.disabled=true;return;}
+    if(state===STATE.PENDING_MINT){btn.textContent="MINTING…";btn.disabled=true;return;}
+    if(state===STATE.MINTED){btn.textContent="MINTED";btn.disabled=true;return;}
   }
 
-  // Live preview: update the tile text while not minted
-  function updatePreview() {
-    const v = $("name").value.trim();
-    $("count").textContent = `${v.length}/14`;
-    if (appState !== STATE.MINTED) {
-      $("previewText").textContent = v ? `i_am_${v}_dave` : "i_am_(yourName)_dave";
-    }
+  // Live preview
+  function updatePreview(){
+    const v=$("name").value.trim();
+    $("count").textContent=`${v.length}/14`;
+    if(appState!==STATE.MINTED){ $("previewText").textContent = v ? `i_am_${v}_dave` : "i_am_(yourName)_dave"; }
   }
   function normalizeInput(e){
-    const before = e.target.value;
-    const after = before.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0,14);
-    if (before !== after) e.target.value = after;
+    const before=e.target.value;
+    const after=before.toLowerCase().replace(/[^a-z0-9-]/g,"").slice(0,14);
+    if(before!==after) e.target.value=after;
     updatePreview();
   }
 
-  async function readChainId() {
-    const id = await window.ethereum.request({ method:"eth_chainId" });
-    return (id || "").toLowerCase();
-  }
+  async function readChainId(){ const id=await window.ethereum.request({method:"eth_chainId"}); return (id||"").toLowerCase(); }
 
-  // Replace tile content helpers
-  function showPreviewTile() {
-    $("tile").innerHTML = `<div id="previewText" style="font-size:24px; color:#F3F3F3;">i_am_(yourName)_dave</div>`;
-  }
-  function showNftTile(src) {
-    $("tile").innerHTML = `<img id="nftImg" alt="Your NFT" src="${src}">`;
-  }
+  function showPreviewTile(){ $("tile").innerHTML = `<div id="previewText" style="font-size:24px;color:#F3F3F3;">i_am_(yourName)_dave</div>`; }
+  function showNftTile(src){ $("tile").innerHTML = `<img id="nftImg" alt="Your NFT" src="${src}">`; }
 
-  // Connect flow
-  async function connect() {
-    try {
-      if (!window.ethereum) {
-        setStatus('No wallet detected. Install <a class="link" href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a>.');
-        setButton(STATE.DISCONNECTED); return;
-      }
-      await window.ethereum.request({ method:"eth_requestAccounts" });
+  // ----- Connect
+  async function connect(){
+    try{
+      if(!window.ethereum){ setStatus('No wallet detected. Install <a class="link" href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a>.'); setButton(STATE.DISCONNECTED); return; }
+      await window.ethereum.request({method:"eth_requestAccounts"});
       provider = new ethers.providers.Web3Provider(window.ethereum, "any");
       signer   = provider.getSigner();
       user     = await signer.getAddress();
@@ -107,99 +95,127 @@
       onCorrectChain = chain === CHAIN_ID_HEX;
       setStatus(`Connected: ${user.slice(0,6)}…${user.slice(-4)} • Chain: ${chain}`);
 
-      if (!onCorrectChain) {
-        setBanner(true, "Switch your wallet to Base Sepolia (84532), then press Retry.");
+      if(!onCorrectChain){
+        setBanner(true,"Switch your wallet to Base Sepolia (84532), then press Retry.");
+        $("retry").style.display="inline-block";
         setButton(STATE.WRONG_NETWORK);
-        $("retry").style.display = "inline-block";
         return;
       }
+      setBanner(false); $("retry").style.display="none";
 
-      setBanner(false); $("retry").style.display = "none";
-
-      // If already minted, render NFT
-      const sbt = new ethers.Contract(SBT_ADDR, SBT_ABI, signer);
-      try {
-        const tid = await sbt.tokenIdOf(user);
-        if (tid && !ethers.BigNumber.from(tid).isZero()) {
-          const uri  = await sbt.tokenURI(tid);
-          const json = atob(uri.split(",")[1]);
-          const data = JSON.parse(json);
+      // Already minted?
+      const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
+      try{
+        const tid=await sbt.tokenIdOf(user);
+        if(tid && !ethers.BigNumber.from(tid).isZero()){
+          const uri=await sbt.tokenURI(tid);
+          const data=JSON.parse(atob(uri.split(",")[1]));
           showNftTile(data.image);
-          $("finalName").textContent = data.name || "";
-          $("links").style.display = "flex";
+          $("finalName").textContent=data.name||"";
+          $("links").style.display="flex";
+          $("name").disabled=true;
           setButton(STATE.MINTED);
-          $("name").disabled = true;
           return;
         }
-      } catch {/* not minted */}
+      }catch{/* not minted */}
 
-      // Not minted: show preview
-      $("name").disabled = false;
-      showPreviewTile();
-      updatePreview();
+      $("name").disabled=false;
+      showPreviewTile(); updatePreview();
       setButton(STATE.READY);
-
-    } catch (err) {
+    }catch(err){
       console.error(err);
-      setStatus(err?.error?.message || err?.data?.message || err.message || "Connection failed");
+      setStatus(err?.error?.message||err?.data?.message||err.message||"Connection failed");
       setButton(STATE.DISCONNECTED);
     }
   }
 
-  async function retryChainCheck() {
-    try {
-      const chain = await readChainId();
+  async function retryChainCheck(){
+    try{
+      const chain=await readChainId();
       onCorrectChain = chain === CHAIN_ID_HEX;
-      setStatus(`Connected: ${user ? user.slice(0,6)+"…"+user.slice(-4) : "—"} • Chain: ${chain}`);
-      if (onCorrectChain) {
-        setBanner(false); $("retry").style.display = "none";
-        showPreviewTile(); updatePreview(); setButton(STATE.READY);
-      } else {
-        setBanner(true, "Still not on Base Sepolia (84532). Switch in your wallet, then press Retry.");
-        setButton(STATE.WRONG_NETWORK);
-      }
-    } catch (err) { console.error(err); setStatus(err?.message || "Retry failed"); }
+      setStatus(`Connected: ${user?user.slice(0,6)+"…"+user.slice(-4):"—"} • Chain: ${chain}`);
+      if(onCorrectChain){ setBanner(false); $("retry").style.display="none"; showPreviewTile(); updatePreview(); setButton(STATE.READY); }
+      else { setBanner(true,"Still not on Base Sepolia (84532). Switch in your wallet, then press Retry."); setButton(STATE.WRONG_NETWORK); }
+    }catch(err){ console.error(err); setStatus(err?.message||"Retry failed"); }
   }
 
-  // Logs scan (10k-safe windows) to get your signature index
-  async function getSigneeNumberViaLogs(addr) {
-    const iface  = new ethers.utils.Interface(DECLARATION_ABI);
-    const topic0 = iface.getEventTopic("DeclarationSigned");
-    const latest = await provider.getBlockNumber();
-    const STEP = 8000;
-    let from = DECLARATION_DEPLOY_BLOCK, to = Math.min(latest, from + STEP);
+  // ----- getLogs scan (10k-cap-safe) + retry after signing
+  async function getSigneeNumberViaLogs(addr){
+    const iface=new ethers.utils.Interface(DECLARATION_ABI);
+    const topic0=iface.getEventTopic("DeclarationSigned");
+    const latest=await provider.getBlockNumber();
+    const STEP=8000;
+    let from=DECLARATION_DEPLOY_BLOCK, to=Math.min(latest, from+STEP);
 
-    while (from <= latest) {
-      const logs = await provider.getLogs({
-        address: DECLARATION_ADDR, fromBlock: from, toBlock: to,
-        topics: [topic0, ethers.utils.hexZeroPad(addr, 32)]
+    while(from<=latest){
+      const logs=await provider.getLogs({
+        address:DECLARATION_ADDR, fromBlock:from, toBlock:to,
+        topics:[topic0, ethers.utils.hexZeroPad(addr,32)]
       });
-      if (logs.length) {
-        const parsed = iface.parseLog(logs[logs.length - 1]);
+      if(logs.length){
+        const parsed=iface.parseLog(logs[logs.length-1]);
         return parsed.args.signatureNumber.toNumber();
       }
-      from = to + 1; to = Math.min(latest, from + STEP);
+      from=to+1; to=Math.min(latest, from+STEP);
     }
     throw new Error("No DeclarationSigned event found for this address");
   }
 
-  // Single primary button handler
-  async function onPrimaryClick() {
-    if (appState === STATE.DISCONNECTED) return connect();
-    if (appState === STATE.WRONG_NETWORK) return; // wait for manual switch + Retry
-    if (appState !== STATE.READY) return;
+  async function getSigneeNumberWithRetry(addr, tries=6, delayMs=1500){
+    let lastErr;
+    for(let i=0;i<tries;i++){
+      try{ return await getSigneeNumberViaLogs(addr); }
+      catch(e){ lastErr=e; await new Promise(r=>setTimeout(r,delayMs)); }
+    }
+    throw lastErr;
+  }
 
-    try {
-      const declaration = new ethers.Contract(DECLARATION_ADDR, DECLARATION_ABI, signer);
-      const sbt         = new ethers.Contract(SBT_ADDR, SBT_ABI, signer);
+  // ----- Extract tokenId from mint receipt or poll until ready
+  async function getMintedTokenIdFromReceipt(rc){
+    try{
+      const erc721 = new ethers.utils.Interface(["event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"]);
+      const topic  = erc721.getEventTopic("Transfer");
+      const logs = rc.logs.filter(l => l.address.toLowerCase() === SBT_ADDR.toLowerCase() && l.topics[0] === topic);
+      for(const l of logs){
+        // topics[1]=from, topics[2]=to (both indexed as 32-byte)
+        if (l.topics[2].toLowerCase() === ethers.utils.hexZeroPad(user,32).toLowerCase()){
+          const parsed = erc721.parseLog(l);
+          return parsed.args.tokenId;
+        }
+      }
+    }catch{/* fallthrough */}
+    return null;
+  }
 
-      const chosen = $("name").value.trim();
-      if (!/^[a-z0-9-]{1,14}$/.test(chosen)) { setStatus("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'"); return; }
+  async function pollTokenIdOf(addr, tries=8, delayMs=1200){
+    const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
+    for(let i=0;i<tries;i++){
+      try{
+        const tid = await sbt.tokenIdOf(addr);
+        if(tid && !ethers.BigNumber.from(tid).isZero()) return tid;
+      }catch{/* ignore */}
+      await new Promise(r=>setTimeout(r,delayMs));
+    }
+    throw new Error("Token not visible yet; please Retry.");
+  }
+
+  // ----- Primary button handler
+  async function onPrimaryClick(){
+    if(appState===STATE.DISCONNECTED) return connect();
+    if(appState===STATE.WRONG_NETWORK) return;
+    if(appState!==STATE.READY) return;
+
+    try{
+      const declaration=new ethers.Contract(DECLARATION_ADDR,DECLARATION_ABI,signer);
+      const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
+
+      const chosen=$("name").value.trim();
+      if(!/^[a-z0-9-]{1,14}$/.test(chosen)){ setStatus("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'"); return; }
 
       setButton(STATE.PENDING_SIGN);
       setStatus("Signing the Declaration…");
       const hasSigned = await declaration.hasSigned(user);
-      if (!hasSigned) {
+      if(!hasSigned){
         const tx = await declaration.cosignDeclaration(chosen);
         const rc = await tx.wait();
         setStatus(`Signed. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc.transactionHash}">View on BaseScan</a>`);
@@ -207,45 +223,46 @@
 
       setButton(STATE.PENDING_MINT);
       setStatus("Minting your soulbound NFT…");
-      const signeeNumber = await getSigneeNumberViaLogs(user);
+      const signeeNumber = await getSigneeNumberWithRetry(user, 6, 1500);
       const tx2 = await sbt.claimWithSignee(signeeNumber);
       const rc2 = await tx2.wait();
-      setStatus(`Minted. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc2.transactionHash}">View on BaseScan</a>`);
 
-      const tokenId = await sbt.tokenIdOf(user);
+      // Prefer tokenId from receipt; fallback to polling mapping
+      let tokenId = await getMintedTokenIdFromReceipt(rc2);
+      if(!tokenId) tokenId = await pollTokenIdOf(user);
+
+      // Now safe to read tokenURI
       const uri  = await sbt.tokenURI(tokenId);
-      const json = atob(uri.split(",")[1]);
-      const data = JSON.parse(json);
+      const data = JSON.parse(atob(uri.split(",")[1]));
 
       showNftTile(data.image);
       $("finalName").textContent = data.name || "";
       $("links").style.display = "flex";
+      $("opensea").href = `https://testnets.opensea.io/assets/base-sepolia/${SBT_ADDR}/${tokenId}`;
+
+      setStatus(`Minted. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc2.transactionHash}">View on BaseScan</a>`);
       setButton(STATE.MINTED);
       $("name").disabled = true;
 
-    } catch (err) {
+    }catch(err){
       console.error(err);
-      setStatus(err?.error?.message || err?.data?.message || err.message || "Something went wrong");
+      setStatus(err?.error?.message||err?.data?.message||err.message||"Something went wrong");
       setButton(STATE.READY);
     }
   }
 
-  // Wallet listeners
-  function attachWalletListeners() {
-    if (!window.ethereum) return;
-    window.ethereum.on?.("accountsChanged", () => { setButton(STATE.DISCONNECTED); $("name").disabled=false; showPreviewTile(); updatePreview(); $("links").style.display="none"; setStatus("Account changed. Reconnect."); });
-    window.ethereum.on?.("chainChanged", async (cid) => {
-      onCorrectChain = (cid||"").toLowerCase() === CHAIN_ID_HEX;
-      if (onCorrectChain) { setBanner(false); $("retry").style.display="none"; }
-      else { setBanner(true,"Switch your wallet to Base Sepolia (84532), then press Retry."); setButton(STATE.WRONG_NETWORK); }
-    });
+  // ----- Wallet listeners
+  function attachWalletListeners(){
+    if(!window.ethereum) return;
+    window.ethereum.on?.("accountsChanged",()=>{ setButton(STATE.DISCONNECTED); $("name").disabled=false; showPreviewTile(); updatePreview(); $("links").style.display="none"; setStatus("Account changed. Reconnect."); });
+    window.ethereum.on?.("chainChanged",(cid)=>{ const ok=(cid||"").toLowerCase()===CHAIN_ID_HEX; if(ok){ setBanner(false); $("retry").style.display="none"; } else { setBanner(true,"Switch your wallet to Base Sepolia (84532), then press Retry."); setButton(STATE.WRONG_NETWORK); } });
   }
 
-  // Boot
-  window.addEventListener("DOMContentLoaded", () => {
-    $("primary").onclick = onPrimaryClick;
-    $("retry").onclick   = retryChainCheck;
-    $("name").addEventListener("input", normalizeInput);
+  // ----- Boot
+  window.addEventListener("DOMContentLoaded",()=>{
+    $("primary").onclick=onPrimaryClick;
+    $("retry").onclick=retryChainCheck;
+    $("name").addEventListener("input",normalizeInput);
     showPreviewTile(); updatePreview();
     attachWalletListeners();
   });
@@ -264,14 +281,14 @@
       <div class="right"><span id="count">0/14</span></div>
 
       <div id="tile" class="nft" style="margin-top:12px;">
-        <div id="previewText" style="font-size:24px; color:#F3F3F3;">i_am_(yourName)_dave</div>
+        <div id="previewText" style="font-size:24px;color:#F3F3F3;">i_am_(yourName)_dave</div>
       </div>
 
       <div class="right" style="margin-top:6px;">
-        <button class="btn" id="retry" style="display:none; width:auto; padding:8px 12px; font-size:12px;">Retry</button>
+        <button class="btn" id="retry" style="display:none;width:auto;padding:8px 12px;font-size:12px;">Retry</button>
       </div>
 
-      <div id="links" class="hint" style="display:none; margin-top:10px;">
+      <div id="links" class="hint" style="display:none;margin-top:10px;">
         <a id="opensea" class="link" target="_blank" rel="noopener">OpenSea (may not load on testnet)</a>
       </div>
 
