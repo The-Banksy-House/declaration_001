@@ -23,8 +23,7 @@
 <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 <script>
   // ---- CONFIG (Base Sepolia) ----
-  const CHAIN_ID_DEC = 84532;
-  const CHAIN_ID_HEX = "0x14A34"; // correct Base Sepolia chainId
+  const CHAIN_ID_HEX = "0x14A34"; // 84532
   const EXPLORER = "https://sepolia.basescan.org";
   const DECLARATION_ADDR = "0xB0731E7ea189c169640Fd890E5dcE9811040D0eA";
   const SBT_ADDR          = "0xe255130A9e2277640d3DfB045075a38d63a34D06";
@@ -44,54 +43,76 @@
 
   let provider, signer, user;
 
-  function $(id){ return document.getElementById(id); }
+  const $ = (id) => document.getElementById(id);
 
   function updatePreview() {
     const v = $('name').value.trim();
     $('previewText').textContent = v ? `i_am_${v}_dave` : "i_am_(yourName)_dave";
   }
 
+  async function requestAccounts() {
+    return window.ethereum.request({ method:"eth_requestAccounts" });
+  }
+
+  async function ensureBaseSepolia() {
+    const chainId = await window.ethereum.request({ method:"eth_chainId" });
+    if (chainId.toLowerCase() === CHAIN_ID_HEX.toLowerCase()) return;
+
+    // Try switch
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: CHAIN_ID_HEX }]
+      });
+      return;
+    } catch (e) {
+      // If chain not added, try add
+      if (e && (e.code === 4902 || /not added/i.test(e.message || ""))) {
+        try {
+          await window.ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: CHAIN_ID_HEX,
+              chainName: "Base Sepolia",
+              nativeCurrency: { name:"Ether", symbol:"ETH", decimals:18 },
+              rpcUrls: ["https://sepolia.base.org"],
+              blockExplorerUrls: [EXPLORER]
+            }]
+          });
+          return;
+        } catch (e2) {
+          // fall through to manual message
+        }
+      }
+      // If switch method not supported or user rejected, show manual instructions
+      throw new Error("Please switch your wallet network to Base Sepolia (chainId 84532), then click Retry.");
+    }
+  }
+
   async function connect() {
     try {
       if (!window.ethereum) {
-        $('status').innerHTML = 'No wallet detected. Install <a class="link" href="https://metamask.io" target="_blank">MetaMask</a> or use WalletConnect.';
+        $('status').innerHTML = 'No wallet detected. Install <a class="link" href="https://metamask.io" target="_blank">MetaMask</a> or open with a wallet that supports WalletConnect.';
         return;
       }
 
-      // 1) Request accounts first (this triggers the wallet)
-      await window.ethereum.request({ method:"eth_requestAccounts" });
-
+      await requestAccounts(); // triggers wallet connect
       provider = new ethers.providers.Web3Provider(window.ethereum, "any");
       signer   = provider.getSigner();
       user     = await signer.getAddress();
 
-      // 2) Ensure chain is Base Sepolia
-      const currentChain = await window.ethereum.request({ method:"eth_chainId" });
-      if (currentChain.toLowerCase() !== CHAIN_ID_HEX.toLowerCase()) {
-        try {
-          await window.ethereum.request({
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: CHAIN_ID_HEX }]
-          });
-        } catch (e) {
-          if (e.code === 4902) {
-            await window.ethereum.request({
-              method: "wallet_addEthereumChain",
-              params: [{
-                chainId: CHAIN_ID_HEX,
-                chainName: "Base Sepolia",
-                nativeCurrency: { name:"Ether", symbol:"ETH", decimals:18 },
-                rpcUrls: ["https://sepolia.base.org"],
-                blockExplorerUrls: [EXPLORER]
-              }]
-            });
-          } else { throw e; }
-        }
+      try {
+        await ensureBaseSepolia();
+      } catch (e) {
+        $('status').textContent = e.message;
+        $('retry').style.display = "inline-block";
+        return;
       }
 
       $('status').textContent = `Connected: ${user.slice(0,6)}…${user.slice(-4)} on Base Sepolia`;
       $('connect').disabled = true;
       $('mint').disabled = false;
+      $('retry').style.display = "none";
 
     } catch (err) {
       console.error(err);
@@ -99,13 +120,13 @@
     }
   }
 
-  // Pull your signee number from logs (indexed by your address)
+  // Event log lookup for signee number
   async function getSigneeNumberViaLogs(addr) {
     const iface  = new ethers.utils.Interface(DECLARATION_ABI);
     const topic0 = iface.getEventTopic("DeclarationSigned");
     const filter = {
       address: DECLARATION_ADDR,
-      fromBlock: 0,           // optionally set to Declaration deploy block to reduce RPC load
+      fromBlock: 0,
       toBlock: "latest",
       topics: [topic0, ethers.utils.hexZeroPad(addr, 32)]
     };
@@ -123,14 +144,7 @@
       const declaration = new ethers.Contract(DECLARATION_ADDR, DECLARATION_ABI, signer);
       const sbt         = new ethers.Contract(SBT_ADDR, SBT_ABI, signer);
 
-      // If already minted, show NFT
-      const existingId = await sbt.tokenIdOf(user);
-      if (existingId && existingId.toString() !== "0") {
-        $('status').textContent = "You already minted. Loading your NFT…";
-        return showNft(sbt, existingId);
-      }
-
-      // If not signed, sign first
+      // If not signed, sign
       const hasSigned = await declaration.hasSigned(user);
       if (!hasSigned) {
         const chosen = $('name').value.trim();
@@ -143,7 +157,7 @@
         $('status').innerHTML = `Signed. <a class="link" href="${EXPLORER}/tx/${rc.transactionHash}" target="_blank">View on BaseScan</a>`;
       }
 
-      // Get signee number and mint
+      // Mint
       $('status').textContent = "Fetching your signee number…";
       const signeeNumber = await getSigneeNumberViaLogs(user);
 
@@ -183,6 +197,7 @@
 
   window.addEventListener("DOMContentLoaded", () => {
     $('connect').onclick = connect;
+    $('retry').onclick   = connect;
     $('mint').onclick    = handleMint;
     $('name').addEventListener("input", updatePreview);
     updatePreview();
@@ -194,7 +209,10 @@
     <h1>i_am_dave — The Banksy Stays on the Wall (Base Sepolia)</h1>
 
     <div class="card">
-      <button class="btn" id="connect">Connect wallet</button>
+      <div class="row" style="gap:8px;">
+        <button class="btn" id="connect">Connect wallet</button>
+        <button class="btn" id="retry" style="display:none;">Retry</button>
+      </div>
       <div class="row" style="margin-top:12px;">
         <input id="name" class="input" maxlength="14" placeholder="yourname"
                pattern="[a-z0-9\-]{1,14}" title="lowercase letters, numbers, hyphen only" />
