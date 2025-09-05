@@ -80,18 +80,20 @@ let discovered = [];
 const LS_KEY = "dave_wallet_choice";
 
 let provider, signer, user, onCorrectChain=false;
-let autoConnectAfterChoose = false;
 let hasSignedFlag = false;
 
-/* connection mutex */
+/* connection mutex for connect() */
 let connectLock = Promise.resolve();
 let connectLocked = false;
 function withConnectLock(fn){
   const run = async ()=>{ try{ connectLocked=true; return await fn(); } finally{ connectLocked=false; } };
   const p = connectLock.then(run, run);
-  connectLock = p.catch(()=>{}); // keep chain alive
+  connectLock = p.catch(()=>{});
   return p;
 }
+
+/* chooser busy guard */
+let chooserBusy = false;
 
 /* =================== DOM HELPERS =================== */
 const $ = id => document.getElementById(id);
@@ -193,8 +195,9 @@ function getFocusableWithin(node){
   return node.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
 }
 function openChooser(autoconnect=false){
-  autoConnectAfterChoose = autoconnect;
   lastFocusedEl = document.activeElement;
+  chooserBusy = false; // reset guard
+
   let list = discovered.length ? discovered : buildFallbackList();
   const grid = $("chooserList");
   grid.innerHTML = "";
@@ -214,9 +217,13 @@ function openChooser(autoconnect=false){
       const name = d.info?.name || "Wallet";
       const sub  = d.info?.rdns || "";
       item.innerHTML = `${icon?`<img src="${icon}" alt="">`:``}<div><div class="provname">${name}</div><div class="provsub">${sub}</div></div>`;
-      // IMPORTANT: request accounts INSIDE this click handler (user gesture)
       item.onclick = async () => {
+        if (chooserBusy) return;
+        chooserBusy = true;
+        // disable all buttons to prevent double taps
+        document.querySelectorAll('.prov').forEach(b => b.disabled = true);
         await useProviderAndRequestAccounts(d, true);
+        document.querySelectorAll('.prov').forEach(b => b.disabled = false);
       };
       grid.appendChild(item);
     });
@@ -244,8 +251,7 @@ function trapFocus(e){
 
 /* ====== Provider selection + gesture-phase account request ====== */
 async function useProviderAndRequestAccounts(detail, remember){
-  // lock to prevent chooser double taps
-  await withConnectLock(async ()=>{
+  try {
     selectedProvider = detail.provider;
     if (remember){
       const key = detail.info?.uuid || detail.info?.rdns || "injected";
@@ -254,19 +260,20 @@ async function useProviderAndRequestAccounts(detail, remember){
     $("chosenLabel").textContent = detail.info?.name || "Wallet";
     attachWalletListeners(selectedProvider);
 
-    try{
-      // Request accounts DURING the user gesture
-      await selectedProvider.request({ method:"eth_requestAccounts" });
-    }catch(err){
-      setStatus(rpcMessage(err));
-      return; // do not proceed
-    } finally {
-      closeChooser();
-    }
+    // Request accounts DURING the user gesture
+    await selectedProvider.request({ method:"eth_requestAccounts" });
 
-    // Now finish full connect flow but SKIP another request
-    await connect({ skipAccountRequest:true });
-  });
+  } catch (err) {
+    setStatus(rpcMessage(err));
+    return; // user may have canceled
+  } finally {
+    closeChooser();
+    chooserBusy = false;
+  }
+
+  // Finish connect flow; do not request accounts again
+  setButton(STATE.PENDING_SIGN);
+  await connect({ skipAccountRequest: true });
 }
 
 /* =================== CHAIN / RPC HELPERS =================== */
@@ -369,12 +376,11 @@ async function fetchTokenJSON(sbt, tokenId, tries=12, delayMs=1200){
 }
 
 /* =================== CONNECT / FLOW =================== */
-async function connect(opts={skipAccountRequest:false}){
-  // ensure serialized connects
+async function connect(opts={ skipAccountRequest:false }){
   return withConnectLock(async ()=>{
     setButton(STATE.PENDING_SIGN);
 
-    // resolve saved provider on first manual connect only
+    // resolve saved provider if user already authorised earlier
     if (!selectedProvider){
       const savedKey = localStorage.getItem(LS_KEY);
       let list = discovered.length ? discovered : buildFallbackList();
@@ -384,13 +390,12 @@ async function connect(opts={skipAccountRequest:false}){
         attachWalletListeners(selectedProvider);
         $("chosenLabel").textContent = found.info?.name || "Wallet";
       } else {
-        // user hasn’t picked yet
         openChooser(true);
         return;
       }
     }
 
-    // If this wasn’t started by a user gesture request, do it now (single attempt)
+    // only request accounts if not already done in gesture
     if (!opts.skipAccountRequest){
       try{
         await selectedProvider.request({method:"eth_requestAccounts"});
@@ -443,7 +448,7 @@ async function connect(opts={skipAccountRequest:false}){
       }
     }catch{}
 
-    // Already signed?
+    // Signed?
     hasSignedFlag = false;
     try {
       const signed = await declaration.hasSigned(user);
@@ -470,6 +475,7 @@ async function connect(opts={skipAccountRequest:false}){
 async function onPrimaryClick(){
   if(appState===STATE.DISCONNECTED){
     if (!selectedProvider) { openChooser(true); return; }
+    if (connectLocked) return;
     return connect();
   }
   if(appState===STATE.WRONG_NETWORK) return;
@@ -541,8 +547,7 @@ function attachWalletListeners(p){
   if(!p) return;
   p.removeAllListeners?.();
   p.on?.("accountsChanged",()=>{
-    $("status").innerHTML = "Account changed. Reconnect.";
-    selectedProvider && console.info("accountsChanged");
+    setStatus("Account changed. Reconnect.");
     user = null; provider = null; signer = null;
     hasSignedFlag = false;
     $("name").disabled=false; $("signedBadge").style.display="none";
@@ -585,7 +590,7 @@ document.addEventListener("keydown",(e)=>{
 async function trySilentReconnect(){
   const savedKey = localStorage.getItem(LS_KEY);
   if (!savedKey) return;
-  // DO NOT call eth_requestAccounts here (no user gesture)
+  // no eth_requestAccounts here
   let list = discovered.length ? discovered : buildFallbackList();
   let found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
   if (!found){
@@ -600,7 +605,6 @@ async function trySilentReconnect(){
     const accs = await selectedProvider.request({ method:"eth_accounts" });
     if (Array.isArray(accs) && accs.length){
       $("chosenLabel").textContent = found.info?.name || "Wallet";
-      // proceed without another accounts request
       await connect({ skipAccountRequest:true });
     }
   }catch{}
