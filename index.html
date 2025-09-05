@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>i_am_dave - Mint (Base Sepolia)</title>
+<title>i_am_dave — Mint (Base Sepolia)</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box}
@@ -26,7 +26,7 @@
   a.link{color:var(--fg);text-decoration:underline}
   .banner{background:#3a2b2b;border:1px solid #6b3a3a;color:#f3e6e6;padding:10px 12px;border-radius:8px;display:none;margin-bottom:8px}
 
-  /* Accessible wallet chooser */
+  /* Wallet chooser (accessible modal) */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:1000}
   .modal{width:min(480px,92vw);background:#121212;border:1px solid var(--border);border-radius:14px;padding:16px}
   .modal h2{margin:0 0 8px;font-size:16px}
@@ -61,7 +61,6 @@ const BASE_SEPOLIA = {
 const DECLARATION_ABI = [
   "function hasSigned(address) view returns (bool)",
   "function signatureByAddress(address) view returns (string)",
-  "function nameExists(string fullName) view returns (bool)",
   "function cosignDeclaration(string chosenName)",
   "event DeclarationSigned(address indexed signatory, string daveName, uint256 signatureNumber, uint256 blockNumber)"
 ];
@@ -76,38 +75,27 @@ const STATE = { DISCONNECTED:"DISCONNECTED", WRONG_NETWORK:"WRONG_NETWORK", READ
 let appState = STATE.DISCONNECTED;
 
 let selectedProvider = null;
-let discovered = [];
+let discovered = [];                    // [{provider, info}]
 const LS_KEY = "dave_wallet_choice";
 
 let provider, signer, user, onCorrectChain=false;
-let hasSignedFlag = false;
-
-let chooserBusy = false; // prevent double taps
+let autoConnectAfterChoose = false;
+let connecting = false;
+let sessionId = 0;
 
 /* =================== DOM HELPERS =================== */
 const $ = id => document.getElementById(id);
 const setStatus = msg => $("status").innerHTML = msg || "";
 const setBanner = (show,msg)=>{ const b=$("banner"); if(show){b.style.display="block";b.textContent=msg}else{b.style.display="none";b.textContent=""} };
 
-function setPrimaryLabel(){ $("primary").textContent = hasSignedFlag ? "MINT SBT" : "SIGN DECLARATION"; }
 function setButton(state){
-  appState=state;
-  const btn=$("primary");
-  btn.onclick = onPrimaryClick;
-  if(state===STATE.DISCONNECTED){btn.textContent="CONNECT WALLET";btn.disabled=false;return;}
-  if(state===STATE.WRONG_NETWORK){
-    btn.textContent="SWITCH TO BASE SEPOLIA";
-    btn.disabled=false;
-    btn.onclick = async()=>{
-      const ok = await attemptSwitchNetwork();
-      if(!ok) setStatus("Open your wallet and switch/add Base Sepolia (chainId 84532).");
-    };
-    return;
-  }
-  if(state===STATE.READY){ setPrimaryLabel(); btn.disabled=false;return; }
-  if(state===STATE.PENDING_SIGN){btn.textContent="WORKING…";btn.disabled=true;return;}
-  if(state===STATE.PENDING_MINT){btn.textContent="MINTING…";btn.disabled=true;return;}
-  if(state===STATE.MINTED){btn.textContent="MINTED";btn.disabled=true;return;}
+  appState=state; const btn=$("primary");
+  if(state===STATE.DISCONNECTED){btn.textContent="CONNECT WALLET";btn.disabled=false;btn.onclick=onPrimaryClick;return;}
+  if(state===STATE.WRONG_NETWORK){btn.textContent="SWITCH TO BASE SEPOLIA";btn.disabled=false;btn.onclick=async()=>{const ok=await attemptSwitchNetwork(); if(!ok) setStatus("Open your wallet and switch/add Base Sepolia (chainId 84532).");};return;}
+  if(state===STATE.READY){btn.textContent="MINT";btn.disabled=false;btn.onclick=onPrimaryClick;return;}
+  if(state===STATE.PENDING_SIGN){btn.textContent="WORKING…";btn.disabled=true;btn.onclick=null;return;}
+  if(state===STATE.PENDING_MINT){btn.textContent="MINTING…";btn.disabled=true;btn.onclick=null;return;}
+  if(state===STATE.MINTED){btn.textContent="MINTED";btn.disabled=true;btn.onclick=null;return;}
 }
 
 function showPreviewTile(){ $("tile").innerHTML = `<div id="previewText" style="font-size:24px;color:#F3F3F3;">i_am_(yourName)_dave</div>`; }
@@ -139,20 +127,17 @@ function decodeErrorData(data){
   return null;
 }
 function rpcMessage(err){
-  if (err?.code === 4001) return "You canceled in your wallet.";
-  const msg = err?.message || err?.error?.message || err?.data?.message || "";
-  if (/circuit|already processing/i.test(msg)) return "Wallet is busy. If the popup is open, approve there. Otherwise try again in 2 seconds.";
-  if (/insufficient funds/i.test(msg)) return "You need test ETH for gas on Base Sepolia.";
+  if (err?.code === 4001) return "Request rejected in wallet.";
   const d = err?.data || err?.error?.data || err?.error || {};
   const reason = decodeErrorData(d?.originalError?.data || d?.data || d);
-  return reason || d?.message || msg || "Unknown RPC error";
+  return reason || d?.message || err?.error?.message || err?.message || "Unknown RPC error";
 }
 
-/* =================== DISCOVERY (EIP-6963 + fallback) =================== */
+/* =================== EIP-6963 DISCOVERY =================== */
 function startDiscovery(){
   discovered = [];
   window.addEventListener("eip6963:announceProvider", (event) => {
-    const d = event.detail; // { info, provider }
+    const d = event.detail;
     if (!discovered.some(x => (x.info?.uuid && x.info.uuid===d.info.uuid) || (x.info?.rdns && x.info.rdns===d.info.rdns))) {
       discovered.push(d);
     }
@@ -181,22 +166,21 @@ function buildFallbackList(){
   return arr;
 }
 
-/* =================== ACCESSIBLE MODAL =================== */
+/* ====== Modal (accessible) ====== */
 let lastFocusedEl = null;
 function getFocusableWithin(node){
   return node.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
 }
-function openChooser(){
+function openChooser(autoconnect=false){
+  autoConnectAfterChoose = autoconnect;
   lastFocusedEl = document.activeElement;
-  chooserBusy = false;
-
+  let list = discovered.length ? discovered : buildFallbackList();
   const grid = $("chooserList");
   grid.innerHTML = "";
-  let list = discovered.length ? discovered : buildFallbackList();
-
   if (!list.length){
     grid.innerHTML = `<div class="hint">No browser wallet detected. Install <a class="link" href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a> or enable your extension, then reopen the chooser.</div>`;
   } else {
+    // Sort common wallets first
     const priority = ["metamask","coinbase","rabby","brave","frame"];
     list.sort((a,b)=>{
       const ra = priority.indexOf(a.info?.rdns); const rb = priority.indexOf(b.info?.rdns);
@@ -210,16 +194,15 @@ function openChooser(){
       const name = d.info?.name || "Wallet";
       const sub  = d.info?.rdns || "";
       item.innerHTML = `${icon?`<img src="${icon}" alt="">`:``}<div><div class="provname">${name}</div><div class="provsub">${sub}</div></div>`;
-
-      // Critical: call request inside THIS exact click handler, before we close the modal.
-      item.addEventListener("click", ()=> chooseWallet(d));
-
+      item.onclick = () => useProvider(d, true);
       grid.appendChild(item);
     });
   }
   $("overlay").style.display="flex";
+  // focus first provider
   const focusables = getFocusableWithin($("modal"));
   focusables[0]?.focus();
+  // trap focus
   $("overlay").addEventListener("keydown", trapFocus);
 }
 function closeChooser(){
@@ -236,6 +219,26 @@ function trapFocus(e){
   const last = focusables[focusables.length-1];
   if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
   else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+}
+function useProvider(detail, remember){
+  selectedProvider = detail.provider;
+  if (remember){
+    const key = detail.info?.uuid || detail.info?.rdns || "injected";
+    localStorage.setItem(LS_KEY, key);
+  }
+  $("chosenLabel").textContent = detail.info?.name || "Wallet";
+  attachWalletListeners(selectedProvider);
+  closeChooser();
+  if (autoConnectAfterChoose) {
+    autoConnectAfterChoose = false;
+    connect().catch(err=>{
+      console.error(err);
+      setStatus(rpcMessage(err));
+      setButton(STATE.DISCONNECTED);
+    });
+  } else {
+    setStatus("Wallet selected. Click CONNECT WALLET to proceed.");
+  }
 }
 
 /* =================== CHAIN / RPC HELPERS =================== */
@@ -255,13 +258,20 @@ async function attemptSwitchNetwork(){
   }
   return false;
 }
+async function preflightContracts(){
+  const codeDecl = await provider.getCode(DECLARATION_ADDR);
+  if(!codeDecl || codeDecl==="0x") throw new Error("No contract code at Declaration address on this network.");
+  const codeSbt = await provider.getCode(SBT_ADDR);
+  if(!codeSbt || codeSbt==="0x") throw new Error("No contract code at SBT address on this network.");
+}
 
 /* =================== CONTRACT HELPERS =================== */
+/** Bounded, backward scan using queryFilter to avoid RPC flakiness */
 async function getSigneeNumberViaLogs(addr){
   const decl = new ethers.Contract(DECLARATION_ADDR, DECLARATION_ABI, provider);
   const filter = decl.filters.DeclarationSigned(addr);
   const latest = await provider.getBlockNumber();
-  const WINDOW = 30000;
+  const WINDOW = 30000; // scan in 30k block windows
   let from = Math.max(DECLARATION_DEPLOY_BLOCK, latest - WINDOW);
   while (from >= DECLARATION_DEPLOY_BLOCK){
     const to = from + WINDOW;
@@ -307,94 +317,50 @@ async function pollTokenIdOf(addr, tries=8, delayMs=1200){
   }
   throw new Error("Token not visible yet; switch back to the tab for a moment and it should appear.");
 }
-async function parseTokenJSON(uri){
-  if (uri?.startsWith("data:application/json")) {
-    const base64 = uri.split(",")[1] || "";
-    return JSON.parse(atob(base64));
-  } else {
-    const gw = uri?.startsWith("ipfs://") ? uri.replace("ipfs://","https://ipfs.io/ipfs/") : uri;
-    const res = await fetch(gw, { cache:"no-store" });
-    return await res.json();
-  }
-}
 async function fetchTokenJSON(sbt, tokenId, tries=12, delayMs=1200){
   let lastErr;
   for(let i=0;i<tries;i++){
     try{
       const uri = await sbt.tokenURI(tokenId);
-      return await parseTokenJSON(uri);
+      if (uri?.startsWith("data:application/json")) {
+        const base64 = uri.split(",")[1] || "";
+        return JSON.parse(atob(base64));
+      } else {
+        const res = await fetch(uri.replace("ipfs://","https://ipfs.io/ipfs/"));
+        return await res.json();
+      }
     } catch(e) { lastErr=e; await new Promise(r=>setTimeout(r,delayMs)); }
   }
   throw lastErr || new Error("tokenURI not available yet");
 }
 
-/* =================== ACCOUNT GATING =================== */
-async function waitForAccounts(p, timeoutMs=20000){
-  const t0 = Date.now();
-  while(Date.now() - t0 < timeoutMs){
-    try{
-      const accs = await p.request({ method:"eth_accounts" });
-      if (Array.isArray(accs) && accs.length) return accs;
-    }catch{}
-    await new Promise(r=>setTimeout(r, 300));
-  }
-  throw new Error("No account connected yet.");
-}
-
-/* =================== CHOOSER HANDLER =================== */
-async function chooseWallet(detail){
-  if (chooserBusy) return;
-  chooserBusy = true;
+/* =================== CONNECT / FLOW =================== */
+async function connect(){
+  if (connecting) return;
+  connecting = true;
+  const my = ++sessionId;
+  setButton(STATE.PENDING_SIGN);
 
   try{
-    selectedProvider = detail.provider;
-    const key = detail.info?.uuid || detail.info?.rdns || "injected";
-    localStorage.setItem(LS_KEY, key);
-    $("chosenLabel").textContent = detail.info?.name || "Wallet";
-    attachWalletListeners(selectedProvider);
-
-    // 1) Try to open wallet immediately from this click (user gesture)
-    let opened = false;
-    try{
-      await selectedProvider.request({ method:"eth_requestAccounts" });
-      opened = true;
-    }catch(e){
-      const msg = (e?.message || "").toLowerCase();
-      // -32002 "request already pending", or "busy" -> wallet likely opened, so we'll poll
-      if (e?.code === -32002 || /circuit|busy|pending/i.test(msg)) {
-        opened = true;
-      } else if (e?.code === 4001) { // user rejected
-        setStatus("You canceled in your wallet.");
-        chooserBusy = false;
-        return;
+    // resolve saved provider or open chooser
+    const savedKey = localStorage.getItem(LS_KEY);
+    if (!selectedProvider){
+      let list = discovered.length ? discovered : buildFallbackList();
+      const found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
+      if (found) {
+        useProvider(found, false);
       } else {
-        setStatus(rpcMessage(e));
-        chooserBusy = false;
+        openChooser(true);
         return;
       }
     }
 
-    // 2) If opened or request sent, wait until accounts exist (user approval)
-    await waitForAccounts(selectedProvider, 20000);
-
-  } finally {
-    closeChooser();
-  }
-
-  // 3) Now finish connection
-  await finalizeConnection();
-  chooserBusy = false;
-}
-
-/* =================== CONNECT FINALIZE =================== */
-async function finalizeConnection(){
-  setButton(STATE.PENDING_SIGN);
-  try{
+    await selectedProvider.request({method:"eth_requestAccounts"});
+    if (sessionId !== my) return; // abandon stale
     provider = new ethers.providers.Web3Provider(selectedProvider, "any");
     signer   = provider.getSigner();
     user     = await signer.getAddress();
 
-    // chain
     let chain = await readChainId(selectedProvider);
     onCorrectChain = chain === CHAIN_ID_HEX;
     if(!onCorrectChain){
@@ -411,16 +377,13 @@ async function finalizeConnection(){
     }
     setBanner(false);
 
-    // preflight
-    const codeDecl = await provider.getCode(DECLARATION_ADDR);
-    const codeSbt  = await provider.getCode(SBT_ADDR);
-    if(!codeDecl || codeDecl==="0x") throw new Error("No contract code at Declaration address on this network.");
-    if(!codeSbt  || codeSbt==="0x") throw new Error("No contract code at SBT address on this network.");
+    try{ await preflightContracts(); }
+    catch(preErr){ setStatus(preErr.message); setButton(STATE.DISCONNECTED); return; }
 
     const declaration=new ethers.Contract(DECLARATION_ADDR,DECLARATION_ABI,signer);
     const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
 
-    // already minted?
+    // Already minted?
     try{
       const tid=await sbt.tokenIdOf(user);
       if(tid && !ethers.BigNumber.from(tid).isZero()){
@@ -430,27 +393,25 @@ async function finalizeConnection(){
         $("links").style.display="flex";
         $("name").disabled=true;
         $("signedBadge").style.display="inline-block";
-        hasSignedFlag = true;
         setButton(STATE.MINTED);
         return;
       }
     }catch{}
 
-    // already signed?
-    hasSignedFlag = false;
-    try {
-      const signed = await declaration.hasSigned(user);
-      if (signed) {
-        const full = await declaration.signatureByAddress(user);
+    // Already signed?
+    let signed=false;
+    try { signed = await declaration.hasSigned(user); } catch {}
+    if (signed) {
+      try {
+        const full = await declaration.signatureByAddress(user); // "i_am_xxx_dave"
         const m = full.match(/^i_am_(.*)_dave$/);
-        if (m && m[1]) { $("name").value = m[1]; $("name").disabled = true; }
-        $("signedBadge").style.display = "inline-block";
-        hasSignedFlag = true;
-      } else {
-        $("name").disabled = false;
-        $("signedBadge").style.display = "none";
-      }
-    } catch {
+        if (m && m[1]) {
+          $("name").value = m[1];
+          $("name").disabled = true;
+          $("signedBadge").style.display = "inline-block";
+        }
+      } catch {}
+    } else {
       $("name").disabled = false;
       $("signedBadge").style.display = "none";
     }
@@ -459,27 +420,18 @@ async function finalizeConnection(){
     setButton(STATE.READY);
 
   }catch(err){
+    console.error(err);
     setStatus(rpcMessage(err));
     setButton(STATE.DISCONNECTED);
+  } finally {
+    if (sessionId === my) connecting = false;
   }
 }
 
-/* =================== PRIMARY BUTTON =================== */
 async function onPrimaryClick(){
   if(appState===STATE.DISCONNECTED){
-    // If a provider was previously chosen but not authorized, allow connect from here too
-    if (selectedProvider){
-      try{
-        await selectedProvider.request({ method:"eth_requestAccounts" });
-        await waitForAccounts(selectedProvider, 20000);
-        await finalizeConnection();
-      }catch(err){
-        setStatus(rpcMessage(err));
-      }
-      return;
-    }
-    openChooser();
-    return;
+    if (!selectedProvider) { openChooser(true); return; }
+    return connect();
   }
   if(appState===STATE.WRONG_NETWORK) return;
   if(appState!==STATE.READY) return;
@@ -491,45 +443,46 @@ async function onPrimaryClick(){
     const chosen=$("name").value.trim();
     if(!/^[a-z0-9-]{1,14}$/.test(chosen)){ setStatus("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'"); return; }
 
-    if(!hasSignedFlag){
-      setButton(STATE.PENDING_SIGN);
-      setStatus("Checking name and preparing to sign…");
-      const full = `i_am_${chosen}_dave`;
-      try{
-        const exists = await declaration.nameExists(full);
-        if (exists) { setStatus("That name is already taken. Try another."); setButton(STATE.READY); return; }
-      }catch{}
+    setButton(STATE.PENDING_SIGN);
+    setStatus("Checking signature…");
+    const already = await declaration.hasSigned(user);
+    if(!already){
       try{ await declaration.callStatic.cosignDeclaration(chosen); }
       catch(e){ throw new Error("Declaration revert: " + rpcMessage(e)); }
+
       setStatus("Signing the Declaration…");
       const tx = await declaration.cosignDeclaration(chosen);
       const rc = await tx.wait();
       setStatus(`Signed. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc.transactionHash}">View on BaseScan</a>`);
       $("name").disabled = true;
       $("signedBadge").style.display = "inline-block";
-      hasSignedFlag = true;
-      setButton(STATE.READY); // now shows MINT SBT
-      return;
     }
 
     setButton(STATE.PENDING_MINT);
     setStatus("Minting your soulbound NFT…");
     const signeeNumber = await getSigneeNumberWithRetry(user, 6, 1200);
+
     try{ await sbt.callStatic.claimWithSignee(signeeNumber); }
     catch(e){ throw new Error("Mint revert: " + rpcMessage(e)); }
+
     const tx2 = await sbt.claimWithSignee(signeeNumber, { gasLimit: 300000 });
     const rc2 = await tx2.wait();
+
     let tokenId = await getMintedTokenIdFromReceipt(rc2);
     if(!tokenId) tokenId = await pollTokenIdOf(user);
+
     const data = await fetchTokenJSON(sbt, tokenId, 12, 1200);
+
     showNftTile(data.image);
     $("finalName").textContent = data.name || "";
     $("links").style.display = "flex";
     $("opensea").href = `https://testnets.opensea.io/assets/base-sepolia/${SBT_ADDR}/${tokenId}`;
+
     setStatus(`Minted. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc2.transactionHash}">View on BaseScan</a>`);
     setButton(STATE.MINTED);
 
   }catch(err){
+    console.error(err);
     setStatus(rpcMessage(err));
     setButton(STATE.READY);
   }
@@ -540,54 +493,88 @@ function attachWalletListeners(p){
   if(!p) return;
   p.removeAllListeners?.();
   p.on?.("accountsChanged",()=>{
-    setStatus("Account changed. Reconnect.");
+    sessionId++; // invalidate in-flight
+    setButton(STATE.DISCONNECTED);
     user = null; provider = null; signer = null;
-    hasSignedFlag = false;
     $("name").disabled=false; $("signedBadge").style.display="none";
     showPreviewTile(); updatePreview(); $("links").style.display="none";
-    setButton(STATE.DISCONNECTED);
+    setStatus("Account changed. Reconnect.");
   });
   p.on?.("chainChanged", async (cid)=>{
     const ok=(cid||"").toLowerCase()===CHAIN_ID_HEX;
     if(ok){
       setBanner(false);
-      setStatus("Network switched. Press Connect to continue.");
-      setButton(STATE.DISCONNECTED);
+      if (user) { await connect(); }
     } else {
-      setBanner(true,"Switch your wallet to Base Sepolia (84532).");
+      setBanner(true,"Switch your wallet to Base Sepolia (84532). This page will update automatically once you switch.");
       setButton(STATE.WRONG_NETWORK);
     }
   });
-  p.on?.("disconnect",()=>{
+  p.on?.("disconnect",(err)=>{
+    console.warn("Provider disconnected", err);
+    sessionId++; // invalidate in-flight
     user = null; provider = null; signer = null;
-    hasSignedFlag = false;
     setBanner(true,"Wallet disconnected. Reconnect to continue.");
     setButton(STATE.DISCONNECTED);
   });
 }
+window.addEventListener("visibilitychange", async ()=>{
+  if(document.visibilityState==="visible" && selectedProvider && user && !connecting){
+    try{
+      const chain = await readChainId(selectedProvider);
+      const ok = chain === CHAIN_ID_HEX;
+      if(ok && appState===STATE.WRONG_NETWORK){ setBanner(false); await connect(); }
+      if(!ok && appState!==STATE.WRONG_NETWORK){ setBanner(true,"Switch your wallet to Base Sepolia (84532)."); setButton(STATE.WRONG_NETWORK); }
+    }catch{}
+  }
+});
 document.addEventListener("keydown",(e)=>{
   if ($("overlay").style.display==="flex" && e.key==="Escape") closeChooser();
 });
 
 /* =================== BOOT =================== */
+async function trySilentReconnect(){
+  const savedKey = localStorage.getItem(LS_KEY);
+  if (!savedKey) return;
+  // Try to resolve immediately
+  let list = discovered.length ? discovered : buildFallbackList();
+  let found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
+  // If not found yet, give discovery a moment
+  if (!found){
+    await new Promise(r=>setTimeout(r, 400));
+    list = discovered.length ? discovered : buildFallbackList();
+    found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
+  }
+  if (!found) return;
+  selectedProvider = found.provider;
+  attachWalletListeners(selectedProvider);
+  try{
+    const accs = await selectedProvider.request({ method:"eth_accounts" });
+    if (Array.isArray(accs) && accs.length){
+      setStatus("Reconnecting to your wallet…");
+      await connect();
+    }
+  }catch{}
+}
+
 window.addEventListener("DOMContentLoaded",()=>{
   $("primary").onclick = onPrimaryClick;
   $("changeWallet").onclick = ()=>{
     localStorage.removeItem(LS_KEY);
     selectedProvider=null;
     $("chosenLabel").textContent="—";
-    openChooser();
+    openChooser(true);
   };
   $("name").addEventListener("input",normalizeInput);
   showPreviewTile(); updatePreview();
   startDiscovery();
-  // Intentionally no silent reconnect - avoids pre-gesture race and “already processing” errors.
+  trySilentReconnect(); // P0: silent reconnect if previously authorized
 });
 </script>
 </head>
 <body>
   <div class="wrap">
-    <h1>i_am_dave - The Banksy Stays on the Wall (Base Sepolia)</h1>
+    <h1>i_am_dave — The Banksy Stays on the Wall (Base Sepolia)</h1>
 
     <div class="card">
       <div id="banner" class="banner"></div>
@@ -609,4 +596,31 @@ window.addEventListener("DOMContentLoaded",()=>{
         <div class="right"><span id="count">0/14</span></div>
       </div>
 
-     
+      <div id="tile" class="nft" style="margin-top:12px;">
+        <div id="previewText" style="font-size:24px;color:#F3F3F3;">i_am_(yourName)_dave</div>
+      </div>
+
+      <div id="links" class="hint" style="display:none;margin-top:10px;">
+        <a id="opensea" class="link" target="_blank" rel="noopener">OpenSea (may not load on testnet)</a>
+      </div>
+
+      <div id="finalName" class="hint" style="margin-top:6px;"></div>
+      <div id="status" class="hint" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="hint">Declaration: 0xB0731E7ea189c169640Fd890E5dcE9811040D0eA • SBT: 0xe255130A9e2277640d3DfB045075a38d63a34D06 • Base Sepolia</div>
+  </div>
+
+  <!-- Wallet chooser modal; accessible -->
+  <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="chooserTitle">
+    <div class="modal" id="modal">
+      <h2 id="chooserTitle">Select a wallet</h2>
+      <div class="chooserGrid" id="chooserList"></div>
+      <div class="footrow">
+        <span class="hint">Your choice is remembered for this site.</span>
+        <button class="btn small" onclick="closeChooser()">Close</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
