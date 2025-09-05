@@ -61,6 +61,7 @@ const BASE_SEPOLIA = {
 const DECLARATION_ABI = [
   "function hasSigned(address) view returns (bool)",
   "function signatureByAddress(address) view returns (string)",
+  "function nameExists(string fullName) view returns (bool)",
   "function cosignDeclaration(string chosenName)",
   "event DeclarationSigned(address indexed signatory, string daveName, uint256 signatureNumber, uint256 blockNumber)"
 ];
@@ -75,24 +76,36 @@ const STATE = { DISCONNECTED:"DISCONNECTED", WRONG_NETWORK:"WRONG_NETWORK", READ
 let appState = STATE.DISCONNECTED;
 
 let selectedProvider = null;
-let discovered = [];                    // [{provider, info}]
+let discovered = [];
 const LS_KEY = "dave_wallet_choice";
 
 let provider, signer, user, onCorrectChain=false;
 let autoConnectAfterChoose = false;
 let connecting = false;
 let sessionId = 0;
+let hasSignedFlag = false; // step-aware
 
 /* =================== DOM HELPERS =================== */
 const $ = id => document.getElementById(id);
 const setStatus = msg => $("status").innerHTML = msg || "";
 const setBanner = (show,msg)=>{ const b=$("banner"); if(show){b.style.display="block";b.textContent=msg}else{b.style.display="none";b.textContent=""} };
 
+function setPrimaryLabelForReady(btn){
+  btn.textContent = hasSignedFlag ? "MINT SBT" : "SIGN + MINT";
+}
 function setButton(state){
   appState=state; const btn=$("primary");
   if(state===STATE.DISCONNECTED){btn.textContent="CONNECT WALLET";btn.disabled=false;btn.onclick=onPrimaryClick;return;}
-  if(state===STATE.WRONG_NETWORK){btn.textContent="SWITCH TO BASE SEPOLIA";btn.disabled=false;btn.onclick=async()=>{const ok=await attemptSwitchNetwork(); if(!ok) setStatus("Open your wallet and switch/add Base Sepolia (chainId 84532).");};return;}
-  if(state===STATE.READY){btn.textContent="MINT";btn.disabled=false;btn.onclick=onPrimaryClick;return;}
+  if(state===STATE.WRONG_NETWORK){
+    btn.textContent="SWITCH TO BASE SEPOLIA";
+    btn.disabled=false;
+    btn.onclick=async()=>{
+      const ok=await attemptSwitchNetwork();
+      if(!ok) setStatus("Open your wallet and switch/add Base Sepolia (chainId 84532). In most wallets: Networks → Add/Switch → Base Sepolia.");
+    };
+    return;
+  }
+  if(state===STATE.READY){ setPrimaryLabelForReady(btn); btn.disabled=false;btn.onclick=onPrimaryClick;return; }
   if(state===STATE.PENDING_SIGN){btn.textContent="WORKING…";btn.disabled=true;btn.onclick=null;return;}
   if(state===STATE.PENDING_MINT){btn.textContent="MINTING…";btn.disabled=true;btn.onclick=null;return;}
   if(state===STATE.MINTED){btn.textContent="MINTED";btn.disabled=true;btn.onclick=null;return;}
@@ -127,10 +140,12 @@ function decodeErrorData(data){
   return null;
 }
 function rpcMessage(err){
-  if (err?.code === 4001) return "Request rejected in wallet.";
+  if (err?.code === 4001) return "You canceled in your wallet.";
+  const msg = err?.message || err?.error?.message || err?.data?.message || "";
+  if (/insufficient funds/i.test(msg)) return "You need test ETH for gas on Base Sepolia.";
   const d = err?.data || err?.error?.data || err?.error || {};
   const reason = decodeErrorData(d?.originalError?.data || d?.data || d);
-  return reason || d?.message || err?.error?.message || err?.message || "Unknown RPC error";
+  return reason || d?.message || msg || "Unknown RPC error";
 }
 
 /* =================== EIP-6963 DISCOVERY =================== */
@@ -180,7 +195,6 @@ function openChooser(autoconnect=false){
   if (!list.length){
     grid.innerHTML = `<div class="hint">No browser wallet detected. Install <a class="link" href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a> or enable your extension, then reopen the chooser.</div>`;
   } else {
-    // Sort common wallets first
     const priority = ["metamask","coinbase","rabby","brave","frame"];
     list.sort((a,b)=>{
       const ra = priority.indexOf(a.info?.rdns); const rb = priority.indexOf(b.info?.rdns);
@@ -199,10 +213,8 @@ function openChooser(autoconnect=false){
     });
   }
   $("overlay").style.display="flex";
-  // focus first provider
   const focusables = getFocusableWithin($("modal"));
   focusables[0]?.focus();
-  // trap focus
   $("overlay").addEventListener("keydown", trapFocus);
 }
 function closeChooser(){
@@ -266,12 +278,11 @@ async function preflightContracts(){
 }
 
 /* =================== CONTRACT HELPERS =================== */
-/** Bounded, backward scan using queryFilter to avoid RPC flakiness */
 async function getSigneeNumberViaLogs(addr){
   const decl = new ethers.Contract(DECLARATION_ADDR, DECLARATION_ABI, provider);
   const filter = decl.filters.DeclarationSigned(addr);
   const latest = await provider.getBlockNumber();
-  const WINDOW = 30000; // scan in 30k block windows
+  const WINDOW = 30000;
   let from = Math.max(DECLARATION_DEPLOY_BLOCK, latest - WINDOW);
   while (from >= DECLARATION_DEPLOY_BLOCK){
     const to = from + WINDOW;
@@ -317,18 +328,25 @@ async function pollTokenIdOf(addr, tries=8, delayMs=1200){
   }
   throw new Error("Token not visible yet; switch back to the tab for a moment and it should appear.");
 }
+async function parseTokenJSON(uri){
+  if (uri?.startsWith("data:application/json")) {
+    const base64 = uri.split(",")[1] || "";
+    if (base64.length > 500_000 && "requestIdleCallback" in window) {
+      return await new Promise(res=>requestIdleCallback(()=>res(JSON.parse(atob(base64)))));
+    }
+    return JSON.parse(atob(base64));
+  } else {
+    const gw = uri?.startsWith("ipfs://") ? uri.replace("ipfs://","https://ipfs.io/ipfs/") : uri;
+    const res = await fetch(gw, { cache:"no-store" });
+    return await res.json();
+  }
+}
 async function fetchTokenJSON(sbt, tokenId, tries=12, delayMs=1200){
   let lastErr;
   for(let i=0;i<tries;i++){
     try{
       const uri = await sbt.tokenURI(tokenId);
-      if (uri?.startsWith("data:application/json")) {
-        const base64 = uri.split(",")[1] || "";
-        return JSON.parse(atob(base64));
-      } else {
-        const res = await fetch(uri.replace("ipfs://","https://ipfs.io/ipfs/"));
-        return await res.json();
-      }
+      return await parseTokenJSON(uri);
     } catch(e) { lastErr=e; await new Promise(r=>setTimeout(r,delayMs)); }
   }
   throw lastErr || new Error("tokenURI not available yet");
@@ -342,7 +360,6 @@ async function connect(){
   setButton(STATE.PENDING_SIGN);
 
   try{
-    // resolve saved provider or open chooser
     const savedKey = localStorage.getItem(LS_KEY);
     if (!selectedProvider){
       let list = discovered.length ? discovered : buildFallbackList();
@@ -356,7 +373,7 @@ async function connect(){
     }
 
     await selectedProvider.request({method:"eth_requestAccounts"});
-    if (sessionId !== my) return; // abandon stale
+    if (sessionId !== my) return;
     provider = new ethers.providers.Web3Provider(selectedProvider, "any");
     signer   = provider.getSigner();
     user     = await signer.getAddress();
@@ -393,25 +410,27 @@ async function connect(){
         $("links").style.display="flex";
         $("name").disabled=true;
         $("signedBadge").style.display="inline-block";
+        hasSignedFlag = true;
         setButton(STATE.MINTED);
         return;
       }
     }catch{}
 
     // Already signed?
-    let signed=false;
-    try { signed = await declaration.hasSigned(user); } catch {}
-    if (signed) {
-      try {
-        const full = await declaration.signatureByAddress(user); // "i_am_xxx_dave"
+    hasSignedFlag = false;
+    try {
+      const signed = await declaration.hasSigned(user);
+      if (signed) {
+        const full = await declaration.signatureByAddress(user);
         const m = full.match(/^i_am_(.*)_dave$/);
-        if (m && m[1]) {
-          $("name").value = m[1];
-          $("name").disabled = true;
-          $("signedBadge").style.display = "inline-block";
-        }
-      } catch {}
-    } else {
+        if (m && m[1]) { $("name").value = m[1]; $("name").disabled = true; }
+        $("signedBadge").style.display = "inline-block";
+        hasSignedFlag = true;
+      } else {
+        $("name").disabled = false;
+        $("signedBadge").style.display = "none";
+      }
+    } catch {
       $("name").disabled = false;
       $("signedBadge").style.display = "none";
     }
@@ -424,10 +443,11 @@ async function connect(){
     setStatus(rpcMessage(err));
     setButton(STATE.DISCONNECTED);
   } finally {
-    if (sessionId === my) connecting = false;
+    connecting = false;
   }
 }
 
+/* --- AUTO SIGN + MINT IN ONE CLICK --- */
 async function onPrimaryClick(){
   if(appState===STATE.DISCONNECTED){
     if (!selectedProvider) { openChooser(true); return; }
@@ -441,14 +461,31 @@ async function onPrimaryClick(){
     const sbt=new ethers.Contract(SBT_ADDR,SBT_ABI,signer);
 
     const chosen=$("name").value.trim();
-    if(!/^[a-z0-9-]{1,14}$/.test(chosen)){ setStatus("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'"); return; }
+    if(!/^[a-z0-9-]{1,14}$/.test(chosen)){
+      setStatus("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'");
+      return;
+    }
 
-    setButton(STATE.PENDING_SIGN);
-    setStatus("Checking signature…");
-    const already = await declaration.hasSigned(user);
-    if(!already){
-      try{ await declaration.callStatic.cosignDeclaration(chosen); }
-      catch(e){ throw new Error("Declaration revert: " + rpcMessage(e)); }
+    // STEP 1: SIGN if needed, then continue straight to mint
+    if(!hasSignedFlag){
+      setButton(STATE.PENDING_SIGN);
+      setStatus("Checking name and preparing to sign…");
+
+      const full = `i_am_${chosen}_dave`;
+      try{
+        const exists = await declaration.nameExists(full);
+        if (exists) {
+          setStatus("That name is already taken. Try another.");
+          setButton(STATE.READY);
+          return;
+        }
+      }catch{}
+
+      try{
+        await declaration.callStatic.cosignDeclaration(chosen);
+      }catch(e){
+        throw new Error("Declaration revert: " + rpcMessage(e));
+      }
 
       setStatus("Signing the Declaration…");
       const tx = await declaration.cosignDeclaration(chosen);
@@ -456,14 +493,20 @@ async function onPrimaryClick(){
       setStatus(`Signed. <a class="link" target="_blank" rel="noopener" href="${EXPLORER}/tx/${rc.transactionHash}">View on BaseScan</a>`);
       $("name").disabled = true;
       $("signedBadge").style.display = "inline-block";
+      hasSignedFlag = true; // proceed to mint
     }
 
+    // STEP 2: MINT immediately
     setButton(STATE.PENDING_MINT);
     setStatus("Minting your soulbound NFT…");
+
     const signeeNumber = await getSigneeNumberWithRetry(user, 6, 1200);
 
-    try{ await sbt.callStatic.claimWithSignee(signeeNumber); }
-    catch(e){ throw new Error("Mint revert: " + rpcMessage(e)); }
+    try{
+      await sbt.callStatic.claimWithSignee(signeeNumber);
+    }catch(e){
+      throw new Error("Mint revert: " + rpcMessage(e));
+    }
 
     const tx2 = await sbt.claimWithSignee(signeeNumber, { gasLimit: 300000 });
     const rc2 = await tx2.wait();
@@ -484,6 +527,7 @@ async function onPrimaryClick(){
   }catch(err){
     console.error(err);
     setStatus(rpcMessage(err));
+    if (err?.code === 4001) { setButton(STATE.READY); return; }
     setButton(STATE.READY);
   }
 }
@@ -493,9 +537,10 @@ function attachWalletListeners(p){
   if(!p) return;
   p.removeAllListeners?.();
   p.on?.("accountsChanged",()=>{
-    sessionId++; // invalidate in-flight
+    sessionId++;
     setButton(STATE.DISCONNECTED);
     user = null; provider = null; signer = null;
+    hasSignedFlag = false;
     $("name").disabled=false; $("signedBadge").style.display="none";
     showPreviewTile(); updatePreview(); $("links").style.display="none";
     setStatus("Account changed. Reconnect.");
@@ -512,8 +557,9 @@ function attachWalletListeners(p){
   });
   p.on?.("disconnect",(err)=>{
     console.warn("Provider disconnected", err);
-    sessionId++; // invalidate in-flight
+    sessionId++;
     user = null; provider = null; signer = null;
+    hasSignedFlag = false;
     setBanner(true,"Wallet disconnected. Reconnect to continue.");
     setButton(STATE.DISCONNECTED);
   });
@@ -536,10 +582,8 @@ document.addEventListener("keydown",(e)=>{
 async function trySilentReconnect(){
   const savedKey = localStorage.getItem(LS_KEY);
   if (!savedKey) return;
-  // Try to resolve immediately
   let list = discovered.length ? discovered : buildFallbackList();
   let found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
-  // If not found yet, give discovery a moment
   if (!found){
     await new Promise(r=>setTimeout(r, 400));
     list = discovered.length ? discovered : buildFallbackList();
@@ -568,7 +612,7 @@ window.addEventListener("DOMContentLoaded",()=>{
   $("name").addEventListener("input",normalizeInput);
   showPreviewTile(); updatePreview();
   startDiscovery();
-  trySilentReconnect(); // P0: silent reconnect if previously authorized
+  trySilentReconnect();
 });
 </script>
 </head>
