@@ -26,7 +26,7 @@
   a.link{color:var(--fg);text-decoration:underline}
   .banner{background:#3a2b2b;border:1px solid #6b3a3a;color:#f3e6e6;padding:10px 12px;border-radius:8px;display:none;margin-bottom:8px}
 
-  /* Wallet chooser (accessible modal) */
+  /* Accessible wallet chooser */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:1000}
   .modal{width:min(480px,92vw);background:#121212;border:1px solid var(--border);border-radius:14px;padding:16px}
   .modal h2{margin:0 0 8px;font-size:16px}
@@ -81,18 +81,24 @@ const LS_KEY = "dave_wallet_choice";
 
 let provider, signer, user, onCorrectChain=false;
 let autoConnectAfterChoose = false;
-let connecting = false;
-let sessionId = 0;
-let hasSignedFlag = false; // step-aware UI
+let hasSignedFlag = false;
+
+/* connection mutex */
+let connectLock = Promise.resolve();
+let connectLocked = false;
+function withConnectLock(fn){
+  const run = async ()=>{ try{ connectLocked=true; return await fn(); } finally{ connectLocked=false; } };
+  const p = connectLock.then(run, run);
+  connectLock = p.catch(()=>{}); // keep chain alive
+  return p;
+}
 
 /* =================== DOM HELPERS =================== */
 const $ = id => document.getElementById(id);
 const setStatus = msg => $("status").innerHTML = msg || "";
 const setBanner = (show,msg)=>{ const b=$("banner"); if(show){b.style.display="block";b.textContent=msg}else{b.style.display="none";b.textContent=""} };
 
-function setPrimaryLabelForReady(btn){
-  btn.textContent = hasSignedFlag ? "MINT SBT" : "SIGN DECLARATION";
-}
+function setPrimaryLabelForReady(btn){ btn.textContent = hasSignedFlag ? "MINT SBT" : "SIGN DECLARATION"; }
 function setButton(state){
   appState=state; const btn=$("primary");
   if(state===STATE.DISCONNECTED){btn.textContent="CONNECT WALLET";btn.disabled=false;btn.onclick=onPrimaryClick;return;}
@@ -101,7 +107,7 @@ function setButton(state){
     btn.disabled=false;
     btn.onclick=async()=>{
       const ok=await attemptSwitchNetwork();
-      if(!ok) setStatus("Open your wallet and switch/add Base Sepolia (chainId 84532). In most wallets: Networks → Add/Switch → Base Sepolia.");
+      if(!ok) setStatus("Open your wallet and switch/add Base Sepolia (chainId 84532).");
     };
     return;
   }
@@ -208,7 +214,10 @@ function openChooser(autoconnect=false){
       const name = d.info?.name || "Wallet";
       const sub  = d.info?.rdns || "";
       item.innerHTML = `${icon?`<img src="${icon}" alt="">`:``}<div><div class="provname">${name}</div><div class="provsub">${sub}</div></div>`;
-      item.onclick = () => useProvider(d, true);
+      // IMPORTANT: request accounts INSIDE this click handler (user gesture)
+      item.onclick = async () => {
+        await useProviderAndRequestAccounts(d, true);
+      };
       grid.appendChild(item);
     });
   }
@@ -232,25 +241,32 @@ function trapFocus(e){
   if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
   else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
 }
-function useProvider(detail, remember){
-  selectedProvider = detail.provider;
-  if (remember){
-    const key = detail.info?.uuid || detail.info?.rdns || "injected";
-    localStorage.setItem(LS_KEY, key);
-  }
-  $("chosenLabel").textContent = detail.info?.name || "Wallet";
-  attachWalletListeners(selectedProvider);
-  closeChooser();
-  if (autoConnectAfterChoose) {
-    autoConnectAfterChoose = false;
-    connect().catch(err=>{
-      console.error(err);
+
+/* ====== Provider selection + gesture-phase account request ====== */
+async function useProviderAndRequestAccounts(detail, remember){
+  // lock to prevent chooser double taps
+  await withConnectLock(async ()=>{
+    selectedProvider = detail.provider;
+    if (remember){
+      const key = detail.info?.uuid || detail.info?.rdns || "injected";
+      localStorage.setItem(LS_KEY, key);
+    }
+    $("chosenLabel").textContent = detail.info?.name || "Wallet";
+    attachWalletListeners(selectedProvider);
+
+    try{
+      // Request accounts DURING the user gesture
+      await selectedProvider.request({ method:"eth_requestAccounts" });
+    }catch(err){
       setStatus(rpcMessage(err));
-      setButton(STATE.DISCONNECTED);
-    });
-  } else {
-    setStatus("Wallet selected. Click CONNECT WALLET to proceed.");
-  }
+      return; // do not proceed
+    } finally {
+      closeChooser();
+    }
+
+    // Now finish full connect flow but SKIP another request
+    await connect({ skipAccountRequest:true });
+  });
 }
 
 /* =================== CHAIN / RPC HELPERS =================== */
@@ -329,7 +345,6 @@ async function pollTokenIdOf(addr, tries=8, delayMs=1200){
   throw new Error("Token not visible yet; switch back to the tab for a moment and it should appear.");
 }
 async function parseTokenJSON(uri){
-  // Lazy-decode very large data URIs to avoid blocking the main thread
   if (uri?.startsWith("data:application/json")) {
     const base64 = uri.split(",")[1] || "";
     if (base64.length > 500_000 && "requestIdleCallback" in window) {
@@ -354,27 +369,38 @@ async function fetchTokenJSON(sbt, tokenId, tries=12, delayMs=1200){
 }
 
 /* =================== CONNECT / FLOW =================== */
-async function connect(){
-  if (connecting) return;
-  connecting = true;
-  const my = ++sessionId;
-  setButton(STATE.PENDING_SIGN);
+async function connect(opts={skipAccountRequest:false}){
+  // ensure serialized connects
+  return withConnectLock(async ()=>{
+    setButton(STATE.PENDING_SIGN);
 
-  try{
-    const savedKey = localStorage.getItem(LS_KEY);
+    // resolve saved provider on first manual connect only
     if (!selectedProvider){
+      const savedKey = localStorage.getItem(LS_KEY);
       let list = discovered.length ? discovered : buildFallbackList();
       const found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
       if (found) {
-        useProvider(found, false);
+        selectedProvider = found.provider;
+        attachWalletListeners(selectedProvider);
+        $("chosenLabel").textContent = found.info?.name || "Wallet";
       } else {
+        // user hasn’t picked yet
         openChooser(true);
         return;
       }
     }
 
-    await selectedProvider.request({method:"eth_requestAccounts"});
-    if (sessionId !== my) return;
+    // If this wasn’t started by a user gesture request, do it now (single attempt)
+    if (!opts.skipAccountRequest){
+      try{
+        await selectedProvider.request({method:"eth_requestAccounts"});
+      }catch(err){
+        setStatus(rpcMessage(err));
+        setButton(STATE.DISCONNECTED);
+        return;
+      }
+    }
+
     provider = new ethers.providers.Web3Provider(selectedProvider, "any");
     signer   = provider.getSigner();
     user     = await signer.getAddress();
@@ -422,7 +448,7 @@ async function connect(){
     try {
       const signed = await declaration.hasSigned(user);
       if (signed) {
-        const full = await declaration.signatureByAddress(user); // "i_am_xxx_dave"
+        const full = await declaration.signatureByAddress(user);
         const m = full.match(/^i_am_(.*)_dave$/);
         if (m && m[1]) { $("name").value = m[1]; $("name").disabled = true; }
         $("signedBadge").style.display = "inline-block";
@@ -438,14 +464,7 @@ async function connect(){
 
     showPreviewTile(); updatePreview();
     setButton(STATE.READY);
-
-  }catch(err){
-    console.error(err);
-    setStatus(rpcMessage(err));
-    setButton(STATE.DISCONNECTED);
-  } finally {
-    connecting = false;
-  }
+  });
 }
 
 async function onPrimaryClick(){
@@ -463,19 +482,16 @@ async function onPrimaryClick(){
     const chosen=$("name").value.trim();
     if(!/^[a-z0-9-]{1,14}$/.test(chosen)){ setStatus("Name must be 1–14 chars, lowercase a–z, 0–9 or '-'"); return; }
 
-    // If not yet signed, this click is the SIGN step
     if(!hasSignedFlag){
       setButton(STATE.PENDING_SIGN);
       setStatus("Checking name and preparing to sign…");
 
-      // Pre-check name availability to avoid on-chain revert
       const full = `i_am_${chosen}_dave`;
       try{
         const exists = await declaration.nameExists(full);
         if (exists) { setStatus("That name is already taken. Try another."); setButton(STATE.READY); return; }
-      }catch{/* non-fatal */}
+      }catch{}
 
-      // callStatic to catch any other revert reason
       try{ await declaration.callStatic.cosignDeclaration(chosen); }
       catch(e){ throw new Error("Declaration revert: " + rpcMessage(e)); }
 
@@ -486,11 +502,10 @@ async function onPrimaryClick(){
       $("name").disabled = true;
       $("signedBadge").style.display = "inline-block";
       hasSignedFlag = true;
-      setButton(STATE.READY); // now shows "MINT SBT"
+      setButton(STATE.READY);
       return;
     }
 
-    // Otherwise this click is the MINT step
     setButton(STATE.PENDING_MINT);
     setStatus("Minting your soulbound NFT…");
     const signeeNumber = await getSigneeNumberWithRetry(user, 6, 1200);
@@ -517,8 +532,6 @@ async function onPrimaryClick(){
   }catch(err){
     console.error(err);
     setStatus(rpcMessage(err));
-    // If user canceled, go back to READY with correct step label
-    if (err?.code === 4001) { setButton(STATE.READY); return; }
     setButton(STATE.READY);
   }
 }
@@ -528,19 +541,19 @@ function attachWalletListeners(p){
   if(!p) return;
   p.removeAllListeners?.();
   p.on?.("accountsChanged",()=>{
-    sessionId++;
-    setButton(STATE.DISCONNECTED);
+    $("status").innerHTML = "Account changed. Reconnect.";
+    selectedProvider && console.info("accountsChanged");
     user = null; provider = null; signer = null;
     hasSignedFlag = false;
     $("name").disabled=false; $("signedBadge").style.display="none";
     showPreviewTile(); updatePreview(); $("links").style.display="none";
-    setStatus("Account changed. Reconnect.");
+    setButton(STATE.DISCONNECTED);
   });
   p.on?.("chainChanged", async (cid)=>{
     const ok=(cid||"").toLowerCase()===CHAIN_ID_HEX;
     if(ok){
       setBanner(false);
-      if (user) { await connect(); }
+      await connect({ skipAccountRequest:true });
     } else {
       setBanner(true,"Switch your wallet to Base Sepolia (84532). This page will update automatically once you switch.");
       setButton(STATE.WRONG_NETWORK);
@@ -548,7 +561,6 @@ function attachWalletListeners(p){
   });
   p.on?.("disconnect",(err)=>{
     console.warn("Provider disconnected", err);
-    sessionId++;
     user = null; provider = null; signer = null;
     hasSignedFlag = false;
     setBanner(true,"Wallet disconnected. Reconnect to continue.");
@@ -556,11 +568,11 @@ function attachWalletListeners(p){
   });
 }
 window.addEventListener("visibilitychange", async ()=>{
-  if(document.visibilityState==="visible" && selectedProvider && user && !connecting){
+  if(document.visibilityState==="visible" && selectedProvider && user && !connectLocked){
     try{
       const chain = await readChainId(selectedProvider);
       const ok = chain === CHAIN_ID_HEX;
-      if(ok && appState===STATE.WRONG_NETWORK){ setBanner(false); await connect(); }
+      if(ok && appState===STATE.WRONG_NETWORK){ setBanner(false); await connect({ skipAccountRequest:true }); }
       if(!ok && appState!==STATE.WRONG_NETWORK){ setBanner(true,"Switch your wallet to Base Sepolia (84532)."); setButton(STATE.WRONG_NETWORK); }
     }catch{}
   }
@@ -573,10 +585,11 @@ document.addEventListener("keydown",(e)=>{
 async function trySilentReconnect(){
   const savedKey = localStorage.getItem(LS_KEY);
   if (!savedKey) return;
+  // DO NOT call eth_requestAccounts here (no user gesture)
   let list = discovered.length ? discovered : buildFallbackList();
   let found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
   if (!found){
-    await new Promise(r=>setTimeout(r, 400));
+    await new Promise(r=>setTimeout(r, 300));
     list = discovered.length ? discovered : buildFallbackList();
     found = list.find(d => d.info?.uuid===savedKey || d.info?.rdns===savedKey);
   }
@@ -586,8 +599,9 @@ async function trySilentReconnect(){
   try{
     const accs = await selectedProvider.request({ method:"eth_accounts" });
     if (Array.isArray(accs) && accs.length){
-      setStatus("Reconnecting to your wallet…");
-      await connect();
+      $("chosenLabel").textContent = found.info?.name || "Wallet";
+      // proceed without another accounts request
+      await connect({ skipAccountRequest:true });
     }
   }catch{}
 }
